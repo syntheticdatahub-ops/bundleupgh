@@ -1,0 +1,1 @@
+export default function Page() { return (<div className="flex flex-1 items-center justify-center h-full min-h-[500px]"><div className="text-center space-y-2"><h1 className="text-2xl font-bold tracking-tight">Coming Soon</h1><p className="text-muted-foreground">This module is under development.</p></div></div>) }

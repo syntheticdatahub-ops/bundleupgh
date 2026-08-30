@@ -1,0 +1,1 @@
+require('dotenv').config({path:'.env.local'}); const { fsQuery } = require('./.next/server/app/api/orders/route.js'); fsQuery('orders', [], {field:'createdAt', direction:'DESCENDING'}).then(console.log).catch(console.error);
