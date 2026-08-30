@@ -8,7 +8,16 @@ export function getPaystackSecretKey(): string {
 }
 
 export function getPaystackCallbackUrl(): string {
-  return process.env.PAYSTACK_CALLBACK_URL ?? "http://localhost:3000/buy/callback";
+  if (process.env.PAYSTACK_CALLBACK_URL) {
+    return process.env.PAYSTACK_CALLBACK_URL;
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/buy/callback`;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/buy/callback`;
+  }
+  return "http://localhost:3000/buy/callback";
 }
 
 export function generatePaystackReference(orderReference: string): string {
