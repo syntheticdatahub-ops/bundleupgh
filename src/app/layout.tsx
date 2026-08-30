@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ThemeProvider } from "next-themes";
 import { GlobePreloader } from "@/components/globe-preloader";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -47,16 +46,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased font-sans`}
-      suppressHydrationWarning
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased font-sans dark`}
     >
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} forcedTheme="dark" disableTransitionOnChange>
-          <TooltipProvider>
-            <GlobePreloader />
-            {children}
-          </TooltipProvider>
-        </ThemeProvider>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <TooltipProvider>
+          <GlobePreloader />
+          {children}
+        </TooltipProvider>
       </body>
     </html>
   );
