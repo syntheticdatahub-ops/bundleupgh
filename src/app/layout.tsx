@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
+import { GlobePreloader } from "@/components/globe-preloader";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -18,6 +19,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://bundleup.com.gh"),
   title: "BundleUp — Buy Mobile Data in Ghana",
   description: "Buy MTN, Telecel, and AirtelTigo data bundles instantly. Fast delivery, secure payments, and 24/7 support. Ghana's premium data reselling platform.",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
   openGraph: {
     title: "BundleUp — Buy Mobile Data in Ghana",
     description: "Buy MTN, Telecel, and AirtelTigo data bundles instantly. Fast delivery, secure payments.",
@@ -46,7 +52,10 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} forcedTheme="dark" disableTransitionOnChange>
-          <TooltipProvider>{children}</TooltipProvider>
+          <TooltipProvider>
+            <GlobePreloader />
+            {children}
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

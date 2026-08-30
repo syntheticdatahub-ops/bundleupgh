@@ -3,6 +3,7 @@ import { PublicFooter } from "@/components/public/footer"
 import { HeroSection } from "@/components/public/hero-section"
 import { HowItWorks } from "@/components/public/how-it-works"
 import { NetworksSection } from "@/components/public/networks-section"
+import { SupportWidget } from "@/components/support/support-widget"
 import { getBundles } from "@/lib/bundles"
 import { getNetworks } from "@/lib/networks"
 
@@ -21,6 +22,7 @@ export default async function HomePage() {
         <NetworksSection networks={activeNetworks} bundles={bundles} />
       </main>
       <PublicFooter />
+      <SupportWidget />
     </div>
   )
 }

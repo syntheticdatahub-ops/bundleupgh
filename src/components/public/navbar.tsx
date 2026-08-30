@@ -1,11 +1,11 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { ZapIcon, MenuIcon } from "lucide-react"
+import { MenuIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navLinks = [
@@ -19,13 +19,14 @@ export function PublicNavbar() {
   const pathname = usePathname()
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-14 md:h-16 items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded bg-primary text-primary-foreground">
-            <ZapIcon className="size-4" />
+    <header className="sticky top-0 z-50 w-full bg-transparent">
+      <div className="container mx-auto flex h-16 md:h-18 items-center justify-between px-4">
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl shadow-lg shadow-black/30">
+            <Image src="/logo1.png" alt="BundleUp logo" width={40} height={40} className="h-full w-full object-cover" />
           </div>
-          <span className="font-bold tracking-tight">BundleUp</span>
+          <span className="font-bold text-base tracking-tight">BundleUp</span>
         </Link>
 
         {/* Desktop Nav */}
@@ -42,25 +43,30 @@ export function PublicNavbar() {
               {link.title}
             </Link>
           ))}
-          <ThemeToggle />
           <Button nativeButton={false} render={<Link href="/buy" />} size="sm" className="ml-2">
             Buy Data
           </Button>
         </nav>
 
-        {/* Mobile Nav */}
-        <div className="flex md:hidden items-center gap-2">
-          <ThemeToggle />
+        {/* Mobile Nav — theme toggle + hamburger */}
+        <div className="flex md:hidden items-center gap-3">
           <Sheet>
-            <SheetTrigger render={<Button variant="ghost" size="icon" className="size-8 rounded-full" />}>
-              <MenuIcon className="size-5" />
-              <span className="sr-only">Toggle menu</span>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+            <SheetTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex size-11 items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white backdrop-blur-sm transition hover:bg-white/10"
+                >
+                  <MenuIcon className="size-6" />
+                  <span className="sr-only">Toggle menu</span>
+                </button>
+              }
+            />
+            <SheetContent side="right" className="w-[300px] sm:w-[400px] border-l border-border/60 bg-background/90 backdrop-blur-xl">
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded bg-primary text-primary-foreground">
-                    <ZapIcon className="size-4" />
+                  <div className="flex size-9 items-center justify-center overflow-hidden rounded-xl">
+                    <Image src="/logo1.png" alt="BundleUp logo" width={36} height={36} className="h-full w-full object-cover" />
                   </div>
                   <span className="font-bold">BundleUp</span>
                 </SheetTitle>
