@@ -60,9 +60,9 @@ export function HeroSection() {
   }
 
   return (
-    <section className="relative overflow-hidden min-h-[calc(100vh-4rem)] flex items-center py-12 md:py-24 lg:py-32">
+    <section className="relative overflow-hidden min-h-screen -mt-16 flex items-center pt-28 pb-12 md:pt-36 md:pb-24 lg:pt-44 lg:pb-32">
       {/* Globe Background */}
-      <div className="absolute inset-0 -z-20 pointer-events-none flex items-center justify-center opacity-50 translate-y-12 lg:translate-y-0 lg:translate-x-1/4 lg:opacity-40">
+      <div className="absolute inset-0 -z-20 pointer-events-none flex items-center justify-center opacity-50 lg:translate-y-0 lg:translate-x-1/4 lg:opacity-40">
         <div className="w-[150%] h-[150%] max-w-[800px] max-h-[800px] lg:w-[100%] lg:h-[100%] lg:max-w-[1000px] lg:max-h-[1000px]">
           <GlobeDemo />
         </div>
@@ -91,7 +91,7 @@ export function HeroSection() {
             </motion.h1>
             
             <motion.p variants={itemVariants} className="text-lg text-muted-foreground mb-8 max-w-md">
-              Top up any Ghanaian number in under 60 seconds. No registration required.
+              MTN. Telecel. AirtelTigo. Data delivered in seconds, no account needed.
             </motion.p>
             
 

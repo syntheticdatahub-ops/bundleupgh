@@ -5,6 +5,8 @@ import { ZapIcon } from "lucide-react"
 import { useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
 
+import Image from "next/image"
+
 function BuiltByKxy() {
   const [open, setOpen] = useState(false)
 
@@ -55,9 +57,9 @@ function BuiltByKxy() {
     >
       <button
         onClick={() => setOpen((p) => !p)}
-        className="text-xs opacity-50 hover:opacity-100 transition-opacity cursor-pointer select-none font-medium tracking-wide"
+        className="text-[13px] text-white/50 hover:text-white/90 transition-colors cursor-pointer select-none font-medium tracking-wide"
       >
-        Built by <span className="text-primary font-bold">Kxy</span>
+        Built by <span className="text-white font-bold">Kxy</span>
       </button>
 
       <AnimatePresence>
@@ -67,12 +69,12 @@ function BuiltByKxy() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.95 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute bottom-8 right-0 w-56 rounded-2xl border border-border bg-card shadow-2xl p-3 z-50"
+            className="absolute bottom-8 right-0 w-56 rounded-2xl border border-white/10 bg-[#090b0f]/95 shadow-[0_30px_80px_rgba(0,0,0,0.5)] backdrop-blur-2xl p-3 z-50"
           >
             {/* Header */}
             <div className="mb-3 px-1">
-              <p className="text-xs font-bold text-foreground">Kxy</p>
-              <p className="text-[10px] text-muted-foreground">Find me on the internet</p>
+              <p className="text-xs font-bold text-white">Kxy</p>
+              <p className="text-[10px] text-white/50">Find me on the internet</p>
             </div>
 
             {/* Social links */}
@@ -83,14 +85,14 @@ function BuiltByKxy() {
                   href={s.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 rounded-xl px-2 py-2 hover:bg-muted transition-colors group"
+                  className="flex items-center gap-2.5 rounded-xl px-2 py-2 hover:bg-white/5 transition-colors group"
                 >
                   <span className={`flex size-7 items-center justify-center rounded-lg ${s.bg} ${s.color} shrink-0`}>
                     {s.icon}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-foreground leading-none">{s.name}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{s.handle}</p>
+                    <p className="text-xs font-semibold text-white/90 leading-none group-hover:text-white transition-colors">{s.name}</p>
+                    <p className="text-[10px] text-white/50 mt-0.5 truncate">{s.handle}</p>
                   </div>
                 </a>
               ))}
@@ -104,51 +106,67 @@ function BuiltByKxy() {
 
 export function PublicFooter() {
   return (
-    <footer className="border-t bg-foreground text-background dark:bg-card dark:text-foreground">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+    <footer className="relative bg-transparent mt-12 md:mt-24 w-full">
+      <div className="container mx-auto px-4 py-12 md:py-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-8">
+          
           {/* Logo & Tagline */}
-          <div className="flex flex-col items-start gap-4">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="flex size-7 items-center justify-center rounded bg-background text-foreground dark:bg-primary dark:text-primary-foreground">
-                <ZapIcon className="size-4" />
+          <div className="flex flex-col items-start gap-5">
+            <Link href="/" className="flex items-center gap-3 group">
+              <div className="flex size-10 items-center justify-center overflow-hidden rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.3)] transition-transform duration-300 group-hover:scale-105">
+                <Image src="/logo1.png" alt="BundleUp logo" width={40} height={40} className="h-full w-full object-cover" />
               </div>
-              <span className="font-bold tracking-tight">BundleUp</span>
+              <span className="font-bold text-lg tracking-tight text-white/90 group-hover:text-white transition-colors">BundleUp</span>
             </Link>
-            <p className="text-sm opacity-80 max-w-[200px]">
-              Buy mobile data. Instantly.
+            <p className="text-sm text-white/50 max-w-[220px] leading-relaxed">
+              Ghana's fastest data reselling platform. Delivered instantly.
             </p>
           </div>
 
-          {/* Links */}
-          <div className="flex flex-col gap-4">
-            <h4 className="font-semibold">Company</h4>
-            <div className="flex flex-col gap-2 text-sm opacity-80">
-              <Link href="/help" className="hover:opacity-100 transition-opacity">Help & FAQ</Link>
-              <Link href="/track" className="hover:opacity-100 transition-opacity">Track Order</Link>
-              <Link href="#" className="hover:opacity-100 transition-opacity">Privacy Policy</Link>
-              <Link href="#" className="hover:opacity-100 transition-opacity">Terms of Service</Link>
+          {/* Links & Contact Section */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-10">
+            {/* Navigation */}
+            <div className="flex flex-col gap-5">
+              <h4 className="text-[11px] font-bold uppercase tracking-widest text-white/40">Navigation</h4>
+              <div className="flex flex-col gap-3.5 text-[14px] text-white/70 font-medium">
+                <Link href="/help" className="hover:text-white transition-colors">Help & FAQ</Link>
+                <Link href="/track" className="hover:text-white transition-colors">Track Order</Link>
+                <Link href="#" className="hover:text-white transition-colors">Privacy Policy</Link>
+                <Link href="#" className="hover:text-white transition-colors">Terms of Service</Link>
+              </div>
             </div>
-            <div className="flex flex-col gap-1.5 text-sm mt-2 pt-3 border-t border-background/20">
-              <a href="tel:0207959595" className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.07 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 5.61 5.61l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/>
-                </svg>
-                0207 959 595
-              </a>
-              <a href="mailto:syntheticdatahub@gmail.com" className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="20" height="16" x="2" y="4" rx="2"/>
-                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-                </svg>
-                syntheticdatahub@gmail.com
-              </a>
+
+            {/* Support */}
+            <div className="flex flex-col gap-5">
+              <h4 className="text-[11px] font-bold uppercase tracking-widest text-white/40">Support</h4>
+              <div className="flex flex-col gap-4 text-[14px]">
+                <a href="tel:0207959595" className="group flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                  <div className="flex size-8 items-center justify-center rounded-full bg-white/5 border border-white/10 group-hover:bg-white/10 group-hover:border-white/20 transition-all">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/60 group-hover:text-white">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.07 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 5.61 5.61l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/>
+                    </svg>
+                  </div>
+                  <span className="font-medium">0207 959 595</span>
+                </a>
+                <a href="mailto:syntheticdatahub@gmail.com" className="group flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                  <div className="flex size-8 items-center justify-center rounded-full bg-white/5 border border-white/10 group-hover:bg-white/10 group-hover:border-white/20 transition-all">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/60 group-hover:text-white">
+                      <rect width="20" height="16" x="2" y="4" rx="2"/>
+                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                    </svg>
+                  </div>
+                  <span className="font-medium truncate text-xs sm:text-sm">syntheticdatahub@gmail.com</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-12 border-t border-background/20 dark:border-border pt-8 text-sm flex flex-col md:flex-row items-center md:items-center justify-between gap-3">
-          <span className="opacity-60">© {new Date().getFullYear()} BundleUp. All rights reserved.</span>
+        {/* Bottom Bar */}
+        <div className="mt-16 pt-8 border-t border-white/10 flex flex-col-reverse md:flex-row items-center justify-between gap-6">
+          <span className="text-[13px] text-white/40 tracking-wide">
+            © {new Date().getFullYear()} BundleUp. All rights reserved.
+          </span>
           <BuiltByKxy />
         </div>
       </div>
