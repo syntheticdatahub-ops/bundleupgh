@@ -55,7 +55,7 @@ export function HelpFaq() {
       <div className="mb-12 text-center">
         <h1 className="text-3xl font-bold tracking-tight mb-4">Help & FAQ</h1>
         <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-          Everything you need to know about using BundleUp. Can't find the answer you're looking for? Contact our support team.
+          Everything you need to know about using BundleUp. Can&apos;t find the answer you&apos;re looking for? Contact our support team.
         </p>
       </div>
 
@@ -102,7 +102,7 @@ export function HelpFaq() {
             <div className="flex flex-col sm:flex-row gap-4 pt-2">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <MailIcon className="size-4 text-primary" />
-                support@bundleup.com.gh
+                syntheticdatahub@gmail.com
               </div>
               <div className="flex items-center gap-2 text-sm font-medium">
                 <ClockIcon className="size-4 text-primary" />
