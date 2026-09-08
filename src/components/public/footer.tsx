@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ZapIcon } from "lucide-react"
+import { ZapIcon, MapPinIcon } from "lucide-react"
 import { useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
 
@@ -129,6 +129,7 @@ export function PublicFooter() {
             <div className="flex flex-col gap-5">
               <h4 className="text-[11px] font-bold uppercase tracking-widest text-white/40">Navigation</h4>
               <div className="flex flex-col gap-3.5 text-[14px] text-white/70 font-medium">
+                <Link href="/about" className="hover:text-white transition-colors">About Us</Link>
                 <Link href="/help" className="hover:text-white transition-colors">Help & FAQ</Link>
                 <Link href="/track" className="hover:text-white transition-colors">Track Order</Link>
                 <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
@@ -141,6 +142,12 @@ export function PublicFooter() {
             <div className="flex flex-col gap-5">
               <h4 className="text-[11px] font-bold uppercase tracking-widest text-white/40">Support</h4>
               <div className="flex flex-col gap-4 text-[14px]">
+                <div className="group flex items-center gap-3 text-white/70 hover:text-white transition-colors">
+                  <div className="flex size-8 items-center justify-center rounded-full bg-white/5 border border-white/10 group-hover:bg-white/10 group-hover:border-white/20 transition-all">
+                    <MapPinIcon className="size-4 text-white/60 group-hover:text-white" />
+                  </div>
+                  <span className="font-medium">Accra, Ghana</span>
+                </div>
                 <a href="tel:0207959595" className="group flex items-center gap-3 text-white/70 hover:text-white transition-colors">
                   <div className="flex size-8 items-center justify-center rounded-full bg-white/5 border border-white/10 group-hover:bg-white/10 group-hover:border-white/20 transition-all">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/60 group-hover:text-white">
