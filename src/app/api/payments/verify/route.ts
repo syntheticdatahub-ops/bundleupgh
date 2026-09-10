@@ -126,6 +126,7 @@ export async function GET(req: Request) {
       status: "success",
       orderId: order.publicReference,
       reference,
+      fulfillmentStatus: order.fulfillmentStatus ?? "PROCESSING",
       orderDetails: {
         bundle: order.bundleNameSnapshot,
         price: order.sellingPriceSnapshot,

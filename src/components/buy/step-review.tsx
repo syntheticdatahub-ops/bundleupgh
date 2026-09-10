@@ -200,6 +200,21 @@ export function StepReview({
         </div>
       </div>
 
+      {/* Verification notice — always shown */}
+      <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangleIcon className="size-4 text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground block mb-1">Verification notice — new numbers</span>
+            Every order goes through verification on the network portal. If the number is{" "}
+            <span className="font-medium text-foreground">new to the system</span> (first time buying data on it),
+            it must pass a one-time verification before delivery — there is no fixed time for this.{" "}
+            <span className="text-foreground font-medium">Your payment is safe.</span> The bundle delivers
+            automatically once the number clears. No need to re-order or pay again.
+          </div>
+        </div>
+      </div>
+
       {/* Primary CTA — opens confirmation dialog */}
       <Button
         className="w-full h-14 text-lg font-semibold"
