@@ -63,6 +63,10 @@ function getStatusText(payment: string, fulfillment: string) {
     return "Your payment was successful. Your data bundle is currently being processed by our network provider. You don't need to make another payment. We'll update the order once fulfillment is complete."
   }
 
+  if (paymentUpper === "SUCCESS" && fulfillmentUpper === "ON_HOLD") {
+    return "Your payment was successful. Your phone number is currently going through a one-time verification by the telecom provider. The data will be delivered automatically once it clears. Please do not re-order or pay again."
+  }
+
   if (paymentUpper === "SUCCESS" && fulfillmentUpper === "FAILED") {
     return "Your payment was successful, but we're having trouble completing the data delivery. Your order has been flagged for attention. Please contact support so we can assist you."
   }
