@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -486,7 +486,7 @@ function LiveDeliveryTracker({
   onStatusChanged: (ref: string) => void
 }) {
   const [data, setData] = useState<TrackerData | null>(null)
-  const notifiedRef = React.useRef(false)
+  const notifiedRef = useRef(false)
 
   useEffect(() => {
     let active = true
