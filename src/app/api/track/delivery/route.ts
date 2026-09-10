@@ -6,6 +6,28 @@ import { syncDataMartOrderStatus } from "@/lib/datamart";
 const DATAMART_API_KEY = process.env.DATAMART_API_KEY;
 const DATAMART_BASE_URL = "api.datamartgh.shop";
 
+/**
+ * Maps a raw DataMart order/track status string to a clean label for the UI.
+ * DataMart's envelope always has status:"success" for a valid HTTP response —
+ * the actual delivery state lives inside response.data.
+ */
+function mapDataMartStatus(rawStatus: string | undefined): string {
+  if (!rawStatus) return "checking";
+  const s = rawStatus.toLowerCase().replace(/[_\s-]/g, "_");
+  if (s === "completed" || s === "complete") return "delivered";
+  if (s === "failed" || s === "rejected") return "failed";
+  if (
+    s === "waiting" ||
+    s === "on_hold" ||
+    s === "beneficiary_not_allowed" ||
+    s === "not_allowed" ||
+    s === "pending_verification"
+  ) return "on_hold";
+  if (s === "processing" || s === "created" || s === "pending") return "processing";
+  if (s === "refunded") return "refunded";
+  return rawStatus.toLowerCase();
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -33,8 +55,6 @@ export async function GET(req: Request) {
       if (refreshed) order = refreshed;
     }
 
-    // Capture the authoritative BundleUp status after reconciliation.
-    // This is included in the response so the client can detect a change and refresh.
     const bundleupStatus = order.fulfillmentStatus;
 
     // Proxy to DataMart delivery tracker
@@ -57,12 +77,29 @@ export async function GET(req: Request) {
         res.on("end", () => {
           try {
             const json = JSON.parse(data);
-            // Attach the BundleUp fulfillment status so the UI can react to changes
-            resolve(NextResponse.json({ ...json, bundleupStatus }));
+
+            // DataMart envelope: { status: "success", data: { status/orderStatus/trackStatus, message, ... } }
+            // Never expose the envelope "status" (it just means the HTTP call worked).
+            // Extract the actual delivery state from json.data instead.
+            const inner = json?.data ?? {};
+            const rawDeliveryStatus =
+              inner.orderStatus ??
+              inner.trackStatus ??
+              inner.status ??
+              inner.deliveryStatus;
+
+            const trackerStatus = mapDataMartStatus(rawDeliveryStatus);
+            const trackerMessage = inner.message ?? json?.message ?? undefined;
+
+            resolve(NextResponse.json({
+              trackerStatus,      // mapped human-friendly status from json.data
+              trackerMessage,     // optional message from DataMart
+              bundleupStatus,     // authoritative BundleUp Firestore status
+            }));
           } catch {
             resolve(NextResponse.json({
-              status: "unavailable",
-              message: "Live tracking currently unavailable",
+              trackerStatus: "unavailable",
+              trackerMessage: "Live tracking currently unavailable",
               bundleupStatus,
             }));
           }
@@ -71,8 +108,8 @@ export async function GET(req: Request) {
 
       request.on("error", () => {
         resolve(NextResponse.json({
-          status: "error",
-          message: "Could not connect to delivery network",
+          trackerStatus: "error",
+          trackerMessage: "Could not connect to delivery network",
           bundleupStatus,
         }));
       });

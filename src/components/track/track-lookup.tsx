@@ -471,8 +471,8 @@ export function TrackLookup() {
 }
 
 type TrackerData = {
-  status?: string
-  message?: string
+  trackerStatus?: string
+  trackerMessage?: string
   bundleupStatus?: string
 }
 
@@ -499,8 +499,8 @@ function LiveDeliveryTracker({
         if (!active) return
         setData(json)
 
-        // If BundleUp Firestore status changed (e.g. PROCESSING → SUCCESS),
-        // notify the parent to refresh the order list exactly once.
+        // If BundleUp Firestore status changed (e.g. PROCESSING → ON_HOLD → SUCCESS),
+        // notify the parent to re-fetch and refresh the order panel exactly once.
         if (
           json.bundleupStatus &&
           json.bundleupStatus !== currentStatus &&
@@ -550,12 +550,25 @@ function LiveDeliveryTracker({
       <div className="text-xs text-muted-foreground">
         {data ? (
           <>
-            {data.status === "error" || data.status === "unavailable" ? (
-              <span className="text-amber-500">{data.message || "Connecting to telecom provider..."}</span>
+            {data.trackerStatus === "error" || data.trackerStatus === "unavailable" ? (
+              <span className="text-amber-500">{data.trackerMessage || "Connecting to telecom provider..."}</span>
             ) : (
               <>
-                Network status: <span className="font-medium text-foreground capitalize">{data.status || "Checking..."}</span>
-                {data.message && <><br/><span className="opacity-80">{data.message}</span></>}
+                Network status:{" "}
+                <span className="font-medium text-foreground">
+                  {data.trackerStatus === "on_hold"
+                    ? "On hold — verifying number"
+                    : data.trackerStatus === "delivered"
+                    ? "Delivered"
+                    : data.trackerStatus === "processing"
+                    ? "Processing"
+                    : data.trackerStatus === "failed"
+                    ? "Failed"
+                    : data.trackerStatus === "refunded"
+                    ? "Refunded"
+                    : data.trackerStatus ?? "Checking..."}
+                </span>
+                {data.trackerMessage && <><br/><span className="opacity-70 mt-1 block">{data.trackerMessage}</span></>}
               </>
             )}
           </>

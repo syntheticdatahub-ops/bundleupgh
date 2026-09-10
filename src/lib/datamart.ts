@@ -160,7 +160,7 @@ export async function syncDataMartOrderStatus(order: Order): Promise<void> {
     order.fulfillmentStatus === "FAILED" || 
     order.fulfillmentStatus === "REFUNDED"
   ) {
-    return; // Terminal state
+    return; // Already terminal — nothing to sync
   }
 
   const reference = order.fulfillmentProviderReference || order.providerReference;
@@ -169,30 +169,50 @@ export async function syncDataMartOrderStatus(order: Order): Promise<void> {
   try {
     const response = await dataMartRequest<any>(`/api/developer/order-status/${encodeURIComponent(reference)}`, "GET");
     
+    // DataMart envelope: { status: "success", data: { orderStatus, status, ... } }
+    // The envelope status:"success" just means the API call worked.
+    // The actual delivery state is inside response.data.
     if (response.status === "success" && response.data) {
-      const data = response.data;
-      const orderStatus = data.status || data.orderStatus;
+      const inner = response.data;
+      // Try multiple field names DataMart may use
+      const orderStatus = (
+        inner.orderStatus ??
+        inner.status ??
+        inner.trackStatus ??
+        inner.deliveryStatus ??
+        ""
+      ).toLowerCase().replace(/[_\s-]/g, "_");
       
       let newFulfillmentStatus: Order["fulfillmentStatus"] = order.fulfillmentStatus;
       
-      if (orderStatus === "completed") {
+      if (orderStatus === "completed" || orderStatus === "complete") {
         newFulfillmentStatus = "SUCCESS";
-      } else if (orderStatus === "failed") {
+      } else if (orderStatus === "failed" || orderStatus === "rejected") {
         newFulfillmentStatus = "FAILED";
-      } else if (orderStatus === "waiting") {
+      } else if (
+        orderStatus === "waiting" ||
+        orderStatus === "on_hold" ||
+        orderStatus === "beneficiary_not_allowed" ||
+        orderStatus === "not_allowed" ||
+        orderStatus === "pending_verification"
+      ) {
         newFulfillmentStatus = "ON_HOLD";
       } else if (orderStatus === "refunded") {
         newFulfillmentStatus = "REFUNDED";
-      } else if (orderStatus === "processing" || orderStatus === "created") {
+      } else if (orderStatus === "processing" || orderStatus === "created" || orderStatus === "pending") {
         newFulfillmentStatus = "PROCESSING";
       }
 
       await fsUpdate("orders", order.id, {
         fulfillmentStatus: newFulfillmentStatus,
-        providerStatus: orderStatus,
+        providerStatus: inner.orderStatus ?? inner.status ?? orderStatus,
         lastProviderEventAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
+
+      console.log(`[syncDataMartOrderStatus] ${order.id}: ${order.fulfillmentStatus} → ${newFulfillmentStatus} (DataMart: ${orderStatus})`);
+    } else {
+      console.warn(`[syncDataMartOrderStatus] Unexpected response for ${order.id}:`, JSON.stringify(response).slice(0, 200));
     }
   } catch (error: any) {
     console.error(`DataMart status sync failed for ${order.id}:`, error);
