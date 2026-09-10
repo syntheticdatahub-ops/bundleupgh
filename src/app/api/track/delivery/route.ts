@@ -15,7 +15,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Missing reference" }, { status: 400 });
     }
 
-    const order = await getOrderByPublicReference(publicRef);
+    let order = await getOrderByPublicReference(publicRef);
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
@@ -25,17 +25,22 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "No delivery tracking available yet" }, { status: 404 });
     }
 
-    // Trigger fallback reconciliation asynchronously if the order is still non-terminal
-    // This ensures that even if webhooks fail, actively tracked orders will eventually reconcile.
+    // If the order is non-terminal, AWAIT reconciliation so Firestore is updated
+    // before we respond, then re-fetch to get the latest authoritative status.
     if (order.fulfillmentStatus === "PROCESSING" || order.fulfillmentStatus === "ON_HOLD") {
-      syncDataMartOrderStatus(order).catch(console.error);
+      await syncDataMartOrderStatus(order).catch(console.error);
+      const refreshed = await getOrderByPublicReference(publicRef);
+      if (refreshed) order = refreshed;
     }
 
-    // Proxy to DataMart
+    // Capture the authoritative BundleUp status after reconciliation.
+    // This is included in the response so the client can detect a change and refresh.
+    const bundleupStatus = order.fulfillmentStatus;
+
+    // Proxy to DataMart delivery tracker
     return new Promise<NextResponse>((resolve) => {
       const options = {
         hostname: DATAMART_BASE_URL,
-        // Assuming DataMart uses query params or path for reference in delivery-tracker
         path: `/api/developer/delivery-tracker?reference=${encodeURIComponent(providerRef)}`,
         method: "GET",
         headers: {
@@ -52,16 +57,24 @@ export async function GET(req: Request) {
         res.on("end", () => {
           try {
             const json = JSON.parse(data);
-            resolve(NextResponse.json(json));
-          } catch (e) {
-            // Fallback if the endpoint doesn't exist or returns non-JSON
-            resolve(NextResponse.json({ status: "unavailable", message: "Live tracking currently unavailable" }));
+            // Attach the BundleUp fulfillment status so the UI can react to changes
+            resolve(NextResponse.json({ ...json, bundleupStatus }));
+          } catch {
+            resolve(NextResponse.json({
+              status: "unavailable",
+              message: "Live tracking currently unavailable",
+              bundleupStatus,
+            }));
           }
         });
       });
 
       request.on("error", () => {
-        resolve(NextResponse.json({ status: "error", message: "Could not connect to delivery network" }));
+        resolve(NextResponse.json({
+          status: "error",
+          message: "Could not connect to delivery network",
+          bundleupStatus,
+        }));
       });
       request.end();
     });

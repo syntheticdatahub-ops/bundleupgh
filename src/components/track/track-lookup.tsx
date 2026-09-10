@@ -126,6 +126,23 @@ export function TrackLookup() {
     }
   }
 
+  // Called by LiveDeliveryTracker when DataMart status has changed in Firestore.
+  // Silently re-fetches orders and updates selectedOrder so the panel refreshes.
+  const refreshOrders = async (updatedRef: string) => {
+    try {
+      const res = await fetch(`/api/track?phone=${encodeURIComponent(searchedPhone)}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const freshOrders: PublicOrder[] = data.orders ?? []
+      setResults(freshOrders)
+      // Re-select the same order with the fresh data
+      const fresh = freshOrders.find((o) => o.orderReference === updatedRef)
+      if (fresh) setSelectedOrder(fresh)
+    } catch {
+      // Silent — don't surface a refresh error to the user
+    }
+  }
+
   const resetSearch = () => {
     setResults(null)
     setError(null)
@@ -432,7 +449,11 @@ export function TrackLookup() {
                 </div>
                 {/* Delivery Tracker Component integration */}
                 {(selectedOrder.fulfillmentStatus === "PROCESSING" || selectedOrder.fulfillmentStatus === "ON_HOLD") && (
-                  <LiveDeliveryTracker publicReference={selectedOrder.orderReference} />
+                  <LiveDeliveryTracker
+                    publicReference={selectedOrder.orderReference}
+                    currentStatus={selectedOrder.fulfillmentStatus}
+                    onStatusChanged={(ref) => refreshOrders(ref)}
+                  />
                 )}
               </div>
 
@@ -449,17 +470,48 @@ export function TrackLookup() {
   )
 }
 
-function LiveDeliveryTracker({ publicReference }: { publicReference: string }) {
-  const [data, setData] = useState<any>(null)
-  
+type TrackerData = {
+  status?: string
+  message?: string
+  bundleupStatus?: string
+}
+
+function LiveDeliveryTracker({
+  publicReference,
+  currentStatus,
+  onStatusChanged,
+}: {
+  publicReference: string
+  currentStatus: string
+  onStatusChanged: (ref: string) => void
+}) {
+  const [data, setData] = useState<TrackerData | null>(null)
+  const notifiedRef = React.useRef(false)
+
   useEffect(() => {
     let active = true
+    notifiedRef.current = false
+
     const fetchStatus = async () => {
       try {
         const res = await fetch(`/api/track/delivery?reference=${encodeURIComponent(publicReference)}`)
-        const json = await res.json()
-        if (active) setData(json)
-      } catch (e) {}
+        const json: TrackerData = await res.json()
+        if (!active) return
+        setData(json)
+
+        // If BundleUp Firestore status changed (e.g. PROCESSING → SUCCESS),
+        // notify the parent to refresh the order list exactly once.
+        if (
+          json.bundleupStatus &&
+          json.bundleupStatus !== currentStatus &&
+          !notifiedRef.current
+        ) {
+          notifiedRef.current = true
+          onStatusChanged(publicReference)
+        }
+      } catch {
+        // silent
+      }
     }
     fetchStatus()
     const int = setInterval(fetchStatus, 5000)
@@ -467,30 +519,43 @@ function LiveDeliveryTracker({ publicReference }: { publicReference: string }) {
       active = false
       clearInterval(int)
     }
-  }, [publicReference])
+  }, [publicReference, currentStatus, onStatusChanged])
+
+  const isTerminal = data?.bundleupStatus === "SUCCESS" || data?.bundleupStatus === "FAILED" || data?.bundleupStatus === "REFUNDED"
 
   return (
-    <div className="p-4 border border-blue-500/20 bg-blue-500/5 rounded-xl space-y-3 relative overflow-hidden">
+    <div className={cn(
+      "p-4 border rounded-xl space-y-3 relative overflow-hidden",
+      isTerminal ? "border-green-500/20 bg-green-500/5" : "border-blue-500/20 bg-blue-500/5"
+    )}>
       <div className="absolute top-0 right-0 p-4">
         <span className="relative flex h-3 w-3">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+          <span className={cn(
+            "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+            isTerminal ? "bg-green-400" : "bg-blue-400"
+          )}></span>
+          <span className={cn(
+            "relative inline-flex rounded-full h-3 w-3",
+            isTerminal ? "bg-green-500" : "bg-blue-500"
+          )}></span>
         </span>
       </div>
-      <h4 className="font-semibold text-sm text-blue-600 dark:text-blue-400 flex items-center gap-2">
+      <h4 className={cn(
+        "font-semibold text-sm flex items-center gap-2",
+        isTerminal ? "text-green-600 dark:text-green-400" : "text-blue-600 dark:text-blue-400"
+      )}>
         <PackageSearchIcon className="size-4" />
         Live Delivery Network
       </h4>
       <div className="text-xs text-muted-foreground">
-        Scanner: <span className="font-medium text-foreground">Active</span><br/>
         {data ? (
           <>
             {data.status === "error" || data.status === "unavailable" ? (
               <span className="text-amber-500">{data.message || "Connecting to telecom provider..."}</span>
             ) : (
               <>
-                Status: <span className="font-medium text-foreground capitalize">{data.status || "Checking..."}</span><br/>
-                {data.message && <span className="text-blue-500/80">{data.message}</span>}
+                Network status: <span className="font-medium text-foreground capitalize">{data.status || "Checking..."}</span>
+                {data.message && <><br/><span className="opacity-80">{data.message}</span></>}
               </>
             )}
           </>
@@ -501,4 +566,5 @@ function LiveDeliveryTracker({ publicReference }: { publicReference: string }) {
     </div>
   )
 }
+
 
