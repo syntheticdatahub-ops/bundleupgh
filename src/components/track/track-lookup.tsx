@@ -556,17 +556,17 @@ function LiveDeliveryTracker({
               <>
                 Network status:{" "}
                 <span className="font-medium text-foreground">
-                  {data.trackerStatus === "on_hold"
+                  {data.bundleupStatus === "ON_HOLD"
                     ? "On hold — verifying number"
-                    : data.trackerStatus === "delivered"
+                    : data.bundleupStatus === "SUCCESS"
                     ? "Delivered"
-                    : data.trackerStatus === "processing"
+                    : data.bundleupStatus === "PROCESSING"
                     ? "Processing"
-                    : data.trackerStatus === "failed"
+                    : data.bundleupStatus === "FAILED"
                     ? "Failed"
-                    : data.trackerStatus === "refunded"
+                    : data.bundleupStatus === "REFUNDED"
                     ? "Refunded"
-                    : data.trackerStatus ?? "Checking..."}
+                    : "Checking..."}
                 </span>
                 {data.trackerMessage && <><br/><span className="opacity-70 mt-1 block">{data.trackerMessage}</span></>}
               </>
