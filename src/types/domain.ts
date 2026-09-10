@@ -6,39 +6,38 @@
 
 export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED" | "NOT_APPLICABLE";
 
-export type FulfillmentStatus = "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED" | "REFUND_PENDING" | "REFUNDED";
+export type FulfillmentStatus = "PENDING" | "PROCESSING" | "ON_HOLD" | "SUCCESS" | "FAILED" | "REFUND_PENDING" | "REFUNDED";
 
 export interface Network {
-  id: string; // Document ID
+  id: string;
   name: string;
   code: string;
-  color?: string; // Kept for UI styling
+  color?: string;
   active: boolean;
-  createdAt: string; // ISO String or Timestamp representation
+  createdAt: string;
   updatedAt: string;
 }
 
 export interface Bundle {
-  id: string; // Document ID — deterministic: "<networkId>-<dataSize>" e.g. "mtn-5gb"
+  id: string;
   networkId: string;
   name: string;
-  dataSize: string; // e.g. "5GB", "500MB"
-  validity?: string; // e.g. "30 Days"
-  providerCost: number; // DataMart wholesale cost (GHS)
-  sellingPrice: number; // BundleUp retail price set by admin (GHS)
-  active: boolean; // Retail activation state (controlled by admin)
-  providerAvailable?: boolean; // True if currently offered by DataMart, false if retired
-  tag?: string; // Optional UI tag e.g. "Best Value"
-  // DataMart sync metadata
-  dataMartNetwork?: string; // e.g. "YELLO", "TELECEL", "AT_PREMIUM"
-  dataMartCapacity?: number; // Raw capacity value DataMart expects (GB as float)
-  lastSyncedAt?: string; // ISO timestamp of last DataMart sync
+  dataSize: string;
+  validity?: string;
+  providerCost: number;
+  sellingPrice: number;
+  active: boolean;
+  providerAvailable?: boolean;
+  tag?: string;
+  dataMartNetwork?: string;
+  dataMartCapacity?: number;
+  lastSyncedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Customer {
-  id: string; // Document ID
+  id: string;
   phone: string;
   email?: string;
   createdAt: string;
@@ -46,16 +45,15 @@ export interface Customer {
 }
 
 export interface Order {
-  id: string; // Document ID
-  publicReference: string; // e.g. BU-8F42K
-  customerId?: string; // Nullable if guest, but Phase 4 says create/reuse customer
+  id: string;
+  publicReference: string;
+  customerId?: string;
   recipientPhone: string;
   
-  detectedNetworkId?: string; // From Phase 2B
-  networkId: string; // The network used
-  bundleId: string; // The bundle used
+  detectedNetworkId?: string;
+  networkId: string;
+  bundleId: string;
   
-  // Snapshots at time of purchase
   bundleNameSnapshot: string;
   dataSizeSnapshot: string;
   providerCostSnapshot: number;
@@ -65,21 +63,32 @@ export interface Order {
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
   
-  providerReference?: string; // e.g. DataMart ref
-  providerError?: string; // Specific error message returned by provider
+  // Legacy field (deprecated but kept for backward compatibility)
+  providerReference?: string;
+  providerError?: string;
+
+  // New separated tracking fields
+  paymentReference?: string;
+  fulfillmentProviderReference?: string;
+  fulfillmentProviderTransactionId?: string;
+  providerStatus?: string;
+  providerEvent?: string;
+  providerMessage?: string;
+  providerUpdatedAt?: string;
+  lastProviderEventAt?: string;
   
-  source?: "WEB" | "MANUAL"; // WEB is default normal flow, MANUAL is for admin dashboard
-  adminUid?: string; // If manual
-  adminEmail?: string; // If manual
-  adminNote?: string; // Reason for manual fulfillment
-  manualFulfillment?: boolean; // Flag to easily distinguish
+  source?: "WEB" | "MANUAL";
+  adminUid?: string;
+  adminEmail?: string;
+  adminNote?: string;
+  manualFulfillment?: boolean;
   
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Payment {
-  id: string; // Document ID
+  id: string;
   orderId: string;
   provider: "PAYSTACK" | "MOCK";
   providerReference?: string;

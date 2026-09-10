@@ -20,10 +20,11 @@ const paymentColors: Record<string, string> = {
 const fulfillmentColors: Record<string, string> = {
   SUCCESS: "text-green-600 bg-green-500/10 dark:text-green-400",
   PROCESSING: "text-blue-600 bg-blue-500/10 dark:text-blue-400",
+  ON_HOLD: "text-purple-600 bg-purple-500/10 dark:text-purple-400",
   PENDING: "text-amber-600 bg-amber-500/10 dark:text-amber-400",
   FAILED: "text-red-600 bg-red-500/10 dark:text-red-400",
   REFUND_PENDING: "text-purple-600 bg-purple-500/10 dark:text-purple-400",
-  REFUNDED: "text-purple-600 bg-purple-500/10 dark:text-purple-400",
+  REFUNDED: "text-slate-600 bg-slate-500/10 dark:text-slate-400",
 }
 
 export function AdminOrdersTable({ initialOrders, networks }: { initialOrders: Order[], networks: Network[] }) {
@@ -123,15 +124,27 @@ export function AdminOrdersTable({ initialOrders, networks }: { initialOrders: O
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "text-[10px] font-bold tracking-wider",
-                          fulfillmentColors[order.fulfillmentStatus] || ""
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "text-[10px] font-bold tracking-wider",
+                            fulfillmentColors[order.fulfillmentStatus] || ""
+                          )}
+                        >
+                          {order.fulfillmentStatus}
+                        </Badge>
+                        {(order.fulfillmentProviderReference || order.providerReference) && (
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            Ref: {order.fulfillmentProviderReference || order.providerReference}
+                          </span>
                         )}
-                      >
-                        {order.fulfillmentStatus}
-                      </Badge>
+                        {order.providerStatus && (
+                          <span className="text-[10px] text-muted-foreground">
+                            Status: {order.providerStatus}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                       {new Date(order.createdAt).toLocaleDateString()}

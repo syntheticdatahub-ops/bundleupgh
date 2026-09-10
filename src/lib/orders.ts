@@ -44,11 +44,20 @@ export function extractPublicReferenceFromPaystackReference(reference: string): 
 export async function getOrderByProviderReference(providerReference: string): Promise<Order | null> {
   const docs = await fsQuery(
     "orders",
-    [{ field: "providerReference", op: "EQUAL", value: providerReference }]
+    [{ field: "paymentReference", op: "EQUAL", value: providerReference }]
   );
 
   const match = (docs[0] as Order) ?? null;
   if (match) return match;
+
+  // Fallback to legacy field
+  const fallbackDocs = await fsQuery(
+    "orders",
+    [{ field: "providerReference", op: "EQUAL", value: providerReference }]
+  );
+  
+  const fallbackMatchDoc = (fallbackDocs[0] as Order) ?? null;
+  if (fallbackMatchDoc) return fallbackMatchDoc;
 
   const derivedPublicReference = extractPublicReferenceFromPaystackReference(providerReference);
   if (derivedPublicReference) {
@@ -57,7 +66,7 @@ export async function getOrderByProviderReference(providerReference: string): Pr
   }
 
   const allOrders = await getOrders();
-  const fallbackMatch = allOrders.find((order) => order.providerReference === providerReference);
+  const fallbackMatch = allOrders.find((order) => order.paymentReference === providerReference || order.providerReference === providerReference);
   if (fallbackMatch) return fallbackMatch;
 
   if (derivedPublicReference) {
@@ -65,6 +74,23 @@ export async function getOrderByProviderReference(providerReference: string): Pr
   }
 
   return null;
+}
+
+export async function getOrderByFulfillmentProviderReference(reference: string): Promise<Order | null> {
+  const docs = await fsQuery(
+    "orders",
+    [{ field: "fulfillmentProviderReference", op: "EQUAL", value: reference }]
+  );
+
+  const match = (docs[0] as Order) ?? null;
+  if (match) return match;
+
+  // Fallback to searching legacy providerReference
+  const allOrders = await getOrders();
+  return allOrders.find((order) => 
+    order.fulfillmentProviderReference === reference || 
+    order.providerReference === reference
+  ) ?? null;
 }
 
 export async function getOrders(): Promise<Order[]> {

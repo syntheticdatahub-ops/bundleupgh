@@ -34,7 +34,8 @@ export async function POST(req: Request) {
     const amountInPesewas = toPaystackAmount(order.sellingPriceSnapshot);
 
     await fsUpdate("orders", order.id, {
-      providerReference: reference,
+      paymentReference: reference,
+      providerReference: reference, // Legacy fallback
       paymentStatus: "PENDING",
       fulfillmentStatus: "PENDING",
       updatedAt: new Date().toISOString(),

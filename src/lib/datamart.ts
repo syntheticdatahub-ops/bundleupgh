@@ -1,13 +1,28 @@
 import { Order } from "@/types/domain";
 import https from "node:https";
+import crypto from "node:crypto";
 import { normalizePhone } from "./phone";
 import { fsUpdate } from "./firestore-rest";
 
 const DATAMART_API_KEY = process.env.DATAMART_API_KEY;
+const DATAMART_WEBHOOK_SECRET = process.env.DATAMART_WEBHOOK_SECRET;
 const DATAMART_BASE_URL = "api.datamartgh.shop";
 
 if (!DATAMART_API_KEY) {
   console.warn("DATAMART_API_KEY is not set. DataMart API calls will fail.");
+}
+
+export function verifyDataMartWebhookSignature(rawBody: string, signature: string): boolean {
+  if (!DATAMART_WEBHOOK_SECRET || !signature) return false;
+  try {
+    const expected = crypto
+      .createHmac("sha256", DATAMART_WEBHOOK_SECRET)
+      .update(rawBody)
+      .digest("hex");
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch (e) {
+    return false;
+  }
 }
 
 function mapNetwork(networkId: string): string {
@@ -114,7 +129,10 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
 
       await fsUpdate("orders", order.id, {
         fulfillmentStatus: newFulfillmentStatus,
-        providerReference: transactionReference || undefined,
+        fulfillmentProviderReference: response.data.orderReference || undefined,
+        fulfillmentProviderTransactionId: response.data.transactionId || response.data.transactionReference || undefined,
+        providerReference: transactionReference || undefined, // Legacy
+        providerStatus: orderStatus,
         updatedAt: new Date().toISOString(),
       });
       console.log(`DataMart fulfillment success for ${order.id}. Status: ${newFulfillmentStatus}`);
@@ -133,5 +151,50 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
       providerError: error.message || "Network or timeout error.",
       updatedAt: new Date().toISOString(),
     });
+  }
+}
+
+export async function syncDataMartOrderStatus(order: Order): Promise<void> {
+  if (
+    order.fulfillmentStatus === "SUCCESS" || 
+    order.fulfillmentStatus === "FAILED" || 
+    order.fulfillmentStatus === "REFUNDED"
+  ) {
+    return; // Terminal state
+  }
+
+  const reference = order.fulfillmentProviderReference || order.providerReference;
+  if (!reference) return;
+
+  try {
+    const response = await dataMartRequest<any>(`/api/developer/order-status/${encodeURIComponent(reference)}`, "GET");
+    
+    if (response.status === "success" && response.data) {
+      const data = response.data;
+      const orderStatus = data.status || data.orderStatus;
+      
+      let newFulfillmentStatus: Order["fulfillmentStatus"] = order.fulfillmentStatus;
+      
+      if (orderStatus === "completed") {
+        newFulfillmentStatus = "SUCCESS";
+      } else if (orderStatus === "failed") {
+        newFulfillmentStatus = "FAILED";
+      } else if (orderStatus === "waiting") {
+        newFulfillmentStatus = "ON_HOLD";
+      } else if (orderStatus === "refunded") {
+        newFulfillmentStatus = "REFUNDED";
+      } else if (orderStatus === "processing" || orderStatus === "created") {
+        newFulfillmentStatus = "PROCESSING";
+      }
+
+      await fsUpdate("orders", order.id, {
+        fulfillmentStatus: newFulfillmentStatus,
+        providerStatus: orderStatus,
+        lastProviderEventAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  } catch (error: any) {
+    console.error(`DataMart status sync failed for ${order.id}:`, error);
   }
 }

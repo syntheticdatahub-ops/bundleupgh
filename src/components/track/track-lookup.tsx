@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -68,15 +68,19 @@ function FulfillmentStatusBadge({ status }: { status: string }) {
   const s = status.toUpperCase()
   return (
     <Badge variant="secondary" className={cn(
-      "capitalize text-xs font-semibold",
-      s === "DELIVERED" ? "text-green-600 bg-green-500/10 dark:text-green-400" :
+      "capitalize text-xs font-semibold text-center leading-tight whitespace-nowrap",
+      (s === "SUCCESS" || s === "DELIVERED") ? "text-green-600 bg-green-500/10 dark:text-green-400" :
       s === "FAILED"    ? "text-red-600 bg-red-500/10 dark:text-red-400" :
       s === "PROCESSING"? "text-blue-600 bg-blue-500/10 dark:text-blue-400" :
+      s === "ON_HOLD"   ? "text-purple-600 bg-purple-500/10 dark:text-purple-400" :
+      s === "REFUNDED"  ? "text-slate-600 bg-slate-500/10 dark:text-slate-400" :
                           "text-amber-600 bg-amber-500/10 dark:text-amber-400"
     )}>
-      {s === "DELIVERED" ? "Delivered" :
-       s === "FAILED"    ? "Failed" :
-       s === "PROCESSING"? "Processing" : "Pending"}
+      {s === "SUCCESS" || s === "DELIVERED" ? "Delivered" :
+       s === "FAILED"    ? "Delivery failed" :
+       s === "PROCESSING"? "Processing" :
+       s === "ON_HOLD"   ? "Verification in progress" :
+       s === "REFUNDED"  ? "Refunded" : "Pending"}
     </Badge>
   )
 }
@@ -322,13 +326,17 @@ export function TrackLookup() {
               <div className="flex-1 overflow-y-auto p-6 space-y-8">
                 {/* Status Header */}
                 <div className="flex items-center gap-4">
-                  {selectedOrder.fulfillmentStatus === "DELIVERED" ? (
+                  {(selectedOrder.fulfillmentStatus === "SUCCESS" || selectedOrder.fulfillmentStatus === "DELIVERED") ? (
                     <div className="size-16 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
                       <CheckCircle2Icon className="size-8 text-green-600 dark:text-green-400" />
                     </div>
                   ) : selectedOrder.fulfillmentStatus === "FAILED" ? (
                     <div className="size-16 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
                       <AlertCircleIcon className="size-8 text-red-600 dark:text-red-400" />
+                    </div>
+                  ) : selectedOrder.fulfillmentStatus === "ON_HOLD" ? (
+                    <div className="size-16 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0">
+                      <ClockIcon className="size-8 text-purple-600 dark:text-purple-400 animate-pulse" />
                     </div>
                   ) : (
                     <div className="size-16 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
@@ -337,9 +345,10 @@ export function TrackLookup() {
                   )}
                   <div>
                     <h3 className="text-2xl font-bold capitalize">
-                      {selectedOrder.fulfillmentStatus === "DELIVERED" ? "Delivered" :
+                      {(selectedOrder.fulfillmentStatus === "SUCCESS" || selectedOrder.fulfillmentStatus === "DELIVERED") ? "Delivered" :
                        selectedOrder.fulfillmentStatus === "PROCESSING" ? "Processing" :
-                       selectedOrder.fulfillmentStatus === "FAILED" ? "Failed" : "Pending"}
+                       selectedOrder.fulfillmentStatus === "ON_HOLD" ? "Verification in progress" :
+                       selectedOrder.fulfillmentStatus === "FAILED" ? "Delivery failed" : "Pending"}
                     </h3>
                     <p className="text-muted-foreground text-sm">{formatDate(selectedOrder.createdAt)}</p>
                   </div>
@@ -405,20 +414,26 @@ export function TrackLookup() {
                     <div className="relative">
                       <div className={cn(
                         "absolute -left-6 top-1 size-3 rounded-full ring-4 ring-background",
-                        selectedOrder.fulfillmentStatus === "DELIVERED" ? "bg-green-500" :
+                        (selectedOrder.fulfillmentStatus === "SUCCESS" || selectedOrder.fulfillmentStatus === "DELIVERED") ? "bg-green-500" :
                         selectedOrder.fulfillmentStatus === "FAILED"    ? "bg-red-500" :
+                        selectedOrder.fulfillmentStatus === "ON_HOLD"   ? "bg-purple-500" :
                         selectedOrder.fulfillmentStatus === "PROCESSING" ? "bg-blue-500" : "bg-muted"
                       )} />
                       <p className="font-medium text-sm">Data Delivery</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {selectedOrder.fulfillmentStatus === "DELIVERED" ? "Bundle successfully credited to recipient" :
+                        {(selectedOrder.fulfillmentStatus === "SUCCESS" || selectedOrder.fulfillmentStatus === "DELIVERED") ? "Bundle successfully credited to recipient" :
                          selectedOrder.fulfillmentStatus === "FAILED"    ? "Network rejected the top-up request" :
+                         selectedOrder.fulfillmentStatus === "ON_HOLD"   ? "Delivery is temporarily on hold while the network verifies the recipient. You don't need to reorder or pay again." :
                          selectedOrder.fulfillmentStatus === "PROCESSING"? "Bundle is being sent to recipient" :
                          "Awaiting confirmation from network"}
                       </p>
                     </div>
                   </div>
                 </div>
+                {/* Delivery Tracker Component integration */}
+                {(selectedOrder.fulfillmentStatus === "PROCESSING" || selectedOrder.fulfillmentStatus === "ON_HOLD") && (
+                  <LiveDeliveryTracker publicReference={selectedOrder.orderReference} />
+                )}
               </div>
 
               <div className="p-6 border-t bg-muted/10">
@@ -430,6 +445,59 @@ export function TrackLookup() {
           </>
         )}
       </AnimatePresence>
+    </div>
+  )
+}
+
+function LiveDeliveryTracker({ publicReference }: { publicReference: string }) {
+  const [data, setData] = useState<any>(null)
+  
+  useEffect(() => {
+    let active = true
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(`/api/track/delivery?reference=${encodeURIComponent(publicReference)}`)
+        const json = await res.json()
+        if (active) setData(json)
+      } catch (e) {}
+    }
+    fetchStatus()
+    const int = setInterval(fetchStatus, 5000)
+    return () => {
+      active = false
+      clearInterval(int)
+    }
+  }, [publicReference])
+
+  return (
+    <div className="p-4 border border-blue-500/20 bg-blue-500/5 rounded-xl space-y-3 relative overflow-hidden">
+      <div className="absolute top-0 right-0 p-4">
+        <span className="relative flex h-3 w-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+        </span>
+      </div>
+      <h4 className="font-semibold text-sm text-blue-600 dark:text-blue-400 flex items-center gap-2">
+        <PackageSearchIcon className="size-4" />
+        Live Delivery Network
+      </h4>
+      <div className="text-xs text-muted-foreground">
+        Scanner: <span className="font-medium text-foreground">Active</span><br/>
+        {data ? (
+          <>
+            {data.status === "error" || data.status === "unavailable" ? (
+              <span className="text-amber-500">{data.message || "Connecting to telecom provider..."}</span>
+            ) : (
+              <>
+                Status: <span className="font-medium text-foreground capitalize">{data.status || "Checking..."}</span><br/>
+                {data.message && <span className="text-blue-500/80">{data.message}</span>}
+              </>
+            )}
+          </>
+        ) : (
+          <span>Connecting to telecom provider...</span>
+        )}
+      </div>
     </div>
   )
 }
