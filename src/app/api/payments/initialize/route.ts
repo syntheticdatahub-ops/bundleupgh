@@ -62,8 +62,16 @@ export async function POST(req: Request) {
       });
     }
 
+    // Derive a unique per-customer email from their phone number.
+    // Using the same email (customer@bundleup.com) for every order causes
+    // Paystack's fraud system to flag transactions as suspicious because
+    // many different devices/networks all share one identity.
+    const cleanPhone = order.recipientPhone.replace(/\D/g, "");
+    const customerEmail = `${cleanPhone}@bundleup.com`;
+
     const result = await initializePaystackTransaction({
       amountInPesewas,
+      email: customerEmail,
       reference,
       callbackUrl: getPaystackCallbackUrl(),
     });
