@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://www.bundleupgh.shop"),
   title: "BundleUp — Buy Mobile Data in Ghana",
   description: "Buy MTN, Telecel, and AirtelTigo data bundles instantly. Fast delivery, secure payments, and 24/7 support. Ghana's premium data reselling platform.",
-  authors: [{ name: "Play.ato" }],
-  creator: "Play.ato",
+  authors: [{ name: "KXY", url: "https://twitter.com/kxystaysup" }, { name: "Play.ato" }],
+  creator: "KXY (@kxystaysup)",
   publisher: "Play.ato",
   icons: {
     icon: "/favicon.ico",
@@ -41,6 +41,7 @@ export const metadata: Metadata = {
     title: "BundleUp — Buy Mobile Data in Ghana",
     description: "Buy MTN, Telecel, and AirtelTigo data bundles instantly.",
     images: ["/og-image.png"],
+    creator: "@kxystaysup",
   },
   other: {
     "humans-txt": "https://www.bundleupgh.shop/humans.txt",
@@ -78,11 +79,22 @@ export default function RootLayout({
           "@type": "Person",
           "name": "Play.ato"
         },
+        "employee": {
+          "@type": "Person",
+          "name": "KXY",
+          "jobTitle": "Lead Developer & Software Engineer",
+          "url": "https://twitter.com/kxystaysup",
+          "sameAs": [
+            "https://twitter.com/kxystaysup",
+            "https://github.com/kxystaysup",
+            "https://instagram.com/kxystaysup"
+          ]
+        },
         "foundingLocation": {
           "@type": "Place",
           "name": "Accra, Ghana"
         },
-        "description": "BundleUp is owned and operated by Play.ato — a Ghanaian entrepreneur building fast, affordable data bundle services for everyone in Ghana.",
+        "description": "BundleUp is owned and operated by Play.ato. The platform was designed and engineered by KXY (@kxystaysup).",
         "areaServed": {
           "@type": "Country",
           "name": "Ghana"
