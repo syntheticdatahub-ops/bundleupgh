@@ -1,0 +1,17 @@
+/* TEAM */
+Owner: Play.ato
+Site: https://www.bundleupgh.shop
+Location: Accra, Ghana
+
+/* SITE */
+Name: BundleUp
+Description: Ghana's fast and reliable mobile data reselling platform.
+             Buy MTN, Telecel, and AirtelTigo data bundles instantly online.
+Language: English
+Doctype: HTML5
+Standards: HTML5, CSS3, WAI
+Components: Next.js, Firebase, Paystack, DataMart
+Software: VS Code
+
+/* THANKS */
+Built with care for Ghanaian internet users.
