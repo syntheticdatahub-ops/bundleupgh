@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export const DEFAULT_MAINTENANCE_MESSAGE =
@@ -16,7 +17,9 @@ const CACHE_TTL_MS = 10_000;
 let maintenanceCache: { state: MaintenanceState; expiresAt: number } | null = null;
 
 function getMaintenancePath() {
-  return path.join(process.cwd(), "data", "maintenance-state.json");
+  const configuredDir = (process.env.MAINTENANCE_STATE_DIR || "").trim();
+  const writableRoot = configuredDir || path.join(os.tmpdir(), "syntheticdata");
+  return path.join(writableRoot, "maintenance-state.json");
 }
 
 function makeDefaultState(source: MaintenanceState["source"] = "default"): MaintenanceState {
