@@ -12,6 +12,7 @@ import type { Order, Network } from "@/types/domain"
 
 const PAYMENT_COLORS: Record<string, string> = {
   SUCCESS: "text-green-600 bg-green-500/10 dark:text-green-400",
+  PAID: "text-green-600 bg-green-500/10 dark:text-green-400",
   PENDING: "text-amber-600 bg-amber-500/10 dark:text-amber-400",
   FAILED: "text-red-600 bg-red-500/10 dark:text-red-400",
   REFUNDED: "text-purple-600 bg-purple-500/10 dark:text-purple-400",
@@ -40,6 +41,7 @@ const FULFILLMENT_LABELS: Record<string, string> = {
 
 const PAYMENT_LABELS: Record<string, string> = {
   SUCCESS: "Paid",
+  PAID: "Paid",
   PENDING: "Pending",
   FAILED: "Failed",
   REFUNDED: "Refunded",
@@ -163,10 +165,11 @@ export function AdminOrdersTable({
       }
 
       // 2. Payment Filter (Default Operational)
+      const pStatus = (o.paymentStatus || "").toUpperCase()
       if (paymentFilter === "OPERATIONAL") {
-        if (o.paymentStatus !== "SUCCESS" && o.paymentStatus !== "NOT_APPLICABLE") return false
+        if (pStatus !== "SUCCESS" && pStatus !== "PAID" && pStatus !== "NOT_APPLICABLE") return false
       } else if (paymentFilter !== "ALL") {
-        if (o.paymentStatus !== paymentFilter) return false
+        if (pStatus !== paymentFilter && !(paymentFilter === "SUCCESS" && pStatus === "PAID")) return false
       }
 
       // 3. Network Filter
@@ -179,7 +182,8 @@ export function AdminOrdersTable({
 
       // 4. Fulfillment Filter
       if (fulfillmentFilter !== "ALL") {
-        if (o.fulfillmentStatus !== fulfillmentFilter) return false
+        const fStatus = (o.fulfillmentStatus || "").toUpperCase()
+        if (fStatus !== fulfillmentFilter && !(fulfillmentFilter === "SUCCESS" && fStatus === "DELIVERED")) return false
       }
 
       // 5. Date Filter
@@ -309,7 +313,7 @@ export function AdminOrdersTable({
                       className={cn(
                         "border-b last:border-0 hover:bg-primary/5 transition-colors cursor-pointer group",
                         i % 2 === 0 ? "" : "bg-muted/10",
-                        order.paymentStatus === "PENDING" ? "opacity-50" : ""
+                        (order.paymentStatus || "").toUpperCase() === "PENDING" ? "opacity-50" : ""
                       )}
                     >
                       <td className="px-4 py-3 font-mono font-medium">
@@ -348,10 +352,10 @@ export function AdminOrdersTable({
                           variant="secondary"
                           className={cn(
                             "text-[10px] font-bold tracking-wider",
-                            PAYMENT_COLORS[order.paymentStatus] || ""
+                            PAYMENT_COLORS[(order.paymentStatus || "").toUpperCase()] || ""
                           )}
                         >
-                          {PAYMENT_LABELS[order.paymentStatus] || order.paymentStatus}
+                          {PAYMENT_LABELS[(order.paymentStatus || "").toUpperCase()] || order.paymentStatus}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
@@ -360,10 +364,10 @@ export function AdminOrdersTable({
                             variant="secondary"
                             className={cn(
                               "text-[10px] font-bold tracking-wider",
-                              FULFILLMENT_COLORS[order.fulfillmentStatus] || ""
+                              FULFILLMENT_COLORS[(order.fulfillmentStatus || "").toUpperCase()] || (order.fulfillmentStatus?.toUpperCase() === "DELIVERED" ? FULFILLMENT_COLORS["SUCCESS"] : "")
                             )}
                           >
-                            {FULFILLMENT_LABELS[order.fulfillmentStatus] || order.fulfillmentStatus}
+                            {FULFILLMENT_LABELS[(order.fulfillmentStatus || "").toUpperCase()] || (order.fulfillmentStatus?.toUpperCase() === "DELIVERED" ? FULFILLMENT_LABELS["SUCCESS"] : order.fulfillmentStatus)}
                           </Badge>
                           {(order.fulfillmentProviderReference || order.providerReference) && (
                             <span className="text-[10px] text-muted-foreground font-mono">

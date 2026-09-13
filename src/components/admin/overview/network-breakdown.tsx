@@ -2,10 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Order, Network } from "@/types/domain"
 
 export function NetworkBreakdown({ orders, networks }: { orders: Order[], networks: Network[] }) {
-  // Only count operational orders (payment confirmed). This is the same base as all other analytics.
-  const operationalOrders = orders.filter(
-    (o) => o.paymentStatus === "SUCCESS" || o.paymentStatus === "NOT_APPLICABLE"
-  );
+  // Only count operational orders (payment confirmed). Also support legacy "PAID".
+  const operationalOrders = orders.filter((o) => {
+    const status = o.paymentStatus?.toUpperCase() || "";
+    return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
+  });
 
   const stats = networks.map((net) => {
     const netOrders = operationalOrders.filter((o) => o.networkId === net.id);

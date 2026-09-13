@@ -7,7 +7,9 @@ import type { Order } from "@/types/domain"
 // paymentStatus = NOT_APPLICABLE: admin manual fulfillment (no customer payment needed).
 // All other paymentStatus values (PENDING, FAILED, REFUNDED) are NOT operational orders.
 function isOperational(order: Order): boolean {
-  return order.paymentStatus === "SUCCESS" || order.paymentStatus === "NOT_APPLICABLE";
+  // We check for "paid" / "PAID" to gracefully handle the legacy seed data that was pushed to Firestore.
+  const status = order.paymentStatus?.toUpperCase() || "";
+  return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
 }
 
 export function StatsCards({ orders }: { orders: Order[] }) {
@@ -21,9 +23,9 @@ export function StatsCards({ orders }: { orders: Order[] }) {
   let estimatedProfit = 0;
 
   for (const order of operationalOrders) {
-    const fs = order.fulfillmentStatus;
+    const fs = order.fulfillmentStatus?.toUpperCase() || "PENDING";
 
-    if (fs === "SUCCESS") {
+    if (fs === "SUCCESS" || fs === "DELIVERED") {
       deliveredOrders++;
     } else if (fs === "PROCESSING" || fs === "ON_HOLD" || fs === "PENDING") {
       pendingOrders++;

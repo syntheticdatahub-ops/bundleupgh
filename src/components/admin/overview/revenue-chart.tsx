@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Order } from "@/types/domain"
 
 export function RevenueChart({ orders }: { orders: Order[] }) {
-  // Operational orders only — paymentStatus SUCCESS means money was actually collected.
-  const successfulOrders = orders.filter(
-    (o) => o.paymentStatus === "SUCCESS" || o.paymentStatus === "NOT_APPLICABLE"
-  );
+  // Operational orders only — paymentStatus SUCCESS or PAID (legacy) means money was actually collected.
+  const successfulOrders = orders.filter((o) => {
+    const status = o.paymentStatus?.toUpperCase() || "";
+    return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
+  });
 
   if (successfulOrders.length === 0) {
     return (

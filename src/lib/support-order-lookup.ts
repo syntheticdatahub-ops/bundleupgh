@@ -63,9 +63,10 @@ export async function lookupOrdersByPhoneNumber(rawPhone: string, limit = 5): Pr
 
   // Only surface operational (paid) orders. Unpaid/abandoned checkout attempts
   // (paymentStatus = PENDING or FAILED) are not shown to customers or support agents.
-  const operationalOrders = allOrders.filter(
-    (o) => o.paymentStatus === "SUCCESS" || o.paymentStatus === "NOT_APPLICABLE"
-  );
+  const operationalOrders = allOrders.filter((o) => {
+    const status = o.paymentStatus?.toUpperCase() || "";
+    return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
+  });
 
   return operationalOrders.slice(0, limit).map(toSupportOrder);
 }

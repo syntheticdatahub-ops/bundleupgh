@@ -80,9 +80,10 @@ export async function GET(req: Request) {
     // Only surface operational (paid) orders to customers.
     // Unpaid/abandoned checkout attempts (paymentStatus = PENDING or FAILED)
     // must never appear in the customer-facing tracking view.
-    const operationalOrders = allOrders.filter(
-      (o) => o.paymentStatus === "SUCCESS" || o.paymentStatus === "NOT_APPLICABLE"
-    );
+    const operationalOrders = allOrders.filter((o) => {
+      const status = o.paymentStatus?.toUpperCase() || "";
+      return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
+    });
 
     // Sort newest first
     operationalOrders.sort((a, b) => {
