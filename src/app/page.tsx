@@ -6,10 +6,17 @@ import { NetworksSection } from "@/components/public/networks-section"
 import { SupportWidget } from "@/components/support/support-widget"
 import { getBundles } from "@/lib/bundles"
 import { getNetworks } from "@/lib/networks"
+import { redirect } from "next/navigation"
+import { getMaintenanceState } from "@/lib/maintenance"
 
 export const dynamic = "force-dynamic"
 
 export default async function HomePage() {
+  const maintenance = getMaintenanceState()
+  if (maintenance.enabled) {
+    redirect("/maintenance")
+  }
+
   const [networks, bundles] = await Promise.all([getNetworks(), getBundles()])
   const activeNetworks = networks.filter((n) => n.active)
 

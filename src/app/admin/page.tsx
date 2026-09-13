@@ -5,6 +5,7 @@ import { RecentOrdersWidget } from "@/components/admin/overview/recent-orders-wi
 import { getOrders } from "@/lib/orders"
 import { getNetworks } from "@/lib/networks"
 import { AutoRefresh } from "@/components/admin/auto-refresh"
+import { MaintenanceCard } from "@/components/admin/maintenance-card"
 
 export const dynamic = "force-dynamic"
 
@@ -18,9 +19,11 @@ export default async function AdminOverview() {
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Overview</h2>
       </div>
-      
+
+      <MaintenanceCard />
+
       <StatsCards orders={orders} />
-      
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <div className="lg:col-span-4">
           <RevenueChart orders={orders} />
@@ -29,7 +32,7 @@ export default async function AdminOverview() {
           <NetworkBreakdown orders={orders} networks={networks} />
         </div>
       </div>
-      
+
       <div className="grid gap-4 md:grid-cols-1">
         <RecentOrdersWidget orders={orders} networks={networks} />
       </div>
