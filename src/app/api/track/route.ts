@@ -77,14 +77,21 @@ export async function GET(req: Request) {
       }
     }
 
+    // Only surface operational (paid) orders to customers.
+    // Unpaid/abandoned checkout attempts (paymentStatus = PENDING or FAILED)
+    // must never appear in the customer-facing tracking view.
+    const operationalOrders = allOrders.filter(
+      (o) => o.paymentStatus === "SUCCESS" || o.paymentStatus === "NOT_APPLICABLE"
+    );
+
     // Sort newest first
-    allOrders.sort((a, b) => {
+    operationalOrders.sort((a, b) => {
       const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return tb - ta;
     });
 
-    const publicOrders: PublicOrder[] = allOrders.map(toPublicOrder);
+    const publicOrders: PublicOrder[] = operationalOrders.map(toPublicOrder);
 
     return NextResponse.json({ orders: publicOrders, count: publicOrders.length });
   } catch (err: any) {

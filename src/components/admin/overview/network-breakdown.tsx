@@ -2,11 +2,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Order, Network } from "@/types/domain"
 
 export function NetworkBreakdown({ orders, networks }: { orders: Order[], networks: Network[] }) {
-  const successfulOrders = orders.filter((o) => o.fulfillmentStatus === "SUCCESS");
+  // Only count operational orders (payment confirmed). This is the same base as all other analytics.
+  const operationalOrders = orders.filter(
+    (o) => o.paymentStatus === "SUCCESS" || o.paymentStatus === "NOT_APPLICABLE"
+  );
 
   const stats = networks.map((net) => {
-    const netOrders = successfulOrders.filter((o) => o.networkId === net.id);
-    const revenue = netOrders.reduce((sum, o) => sum + o.sellingPriceSnapshot, 0);
+    const netOrders = operationalOrders.filter((o) => o.networkId === net.id);
+    const revenue = netOrders.reduce((sum, o) => sum + (Number(o.sellingPriceSnapshot) || 0), 0);
     return {
       network: net.name,
       color: net.color,
@@ -17,7 +20,7 @@ export function NetworkBreakdown({ orders, networks }: { orders: Order[], networ
 
   const maxOrders = Math.max(...stats.map(n => n.orders), 1);
 
-  if (successfulOrders.length === 0) {
+  if (operationalOrders.length === 0) {
     return (
       <Card className="h-full flex flex-col">
         <CardHeader>

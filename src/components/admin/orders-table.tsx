@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { SearchIcon, ChevronRightIcon } from "lucide-react"
+import { SearchIcon, ChevronRightIcon, FilterIcon } from "lucide-react"
 import { OrderDetailDrawer } from "@/components/admin/order-detail-drawer"
 import type { Order, Network } from "@/types/domain"
 
@@ -49,7 +49,9 @@ const PAYMENT_LABELS: Record<string, string> = {
 function formatDate(iso: string) {
   try {
     return new Date(iso).toLocaleDateString("en-GB", {
+      timeZone: "Africa/Accra",
       day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
     })
   } catch {
     return "—"
@@ -64,41 +66,28 @@ export function AdminOrdersTable({
   networks: Network[]
 }) {
   const [query, setQuery] = useState("")
+  
+  // Filters
+  const [paymentFilter, setPaymentFilter] = useState("OPERATIONAL") // OPERATIONAL, ALL, PENDING, FAILED, REFUNDED
+  const [networkFilter, setNetworkFilter] = useState("ALL")
+  const [fulfillmentFilter, setFulfillmentFilter] = useState("ALL")
+  const [dateFilter, setDateFilter] = useState("ALL")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+
   const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const router = useRouter()
 
-  // Keep local state in sync when server refreshes initialOrders
   useEffect(() => {
     setOrders(initialOrders)
   }, [initialOrders])
 
-  // Polling: refresh server data every 10s
   useEffect(() => {
     const interval = setInterval(() => router.refresh(), 10000)
     return () => clearInterval(interval)
   }, [router])
-
-  // Sort client-side by createdAt DESC (server already returns DESC but guard here too)
-  const sorted = [...orders].sort((a, b) => {
-    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
-    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
-    return tb - ta
-  })
-
-  const normalizedQuery = query.toLowerCase()
-  const filtered = sorted.filter((o) => {
-    const ref = (o.publicReference ?? "").toLowerCase()
-    const phone = (o.recipientPhone ?? "").toLowerCase()
-    const net = networks.find((n) => n.id === o.networkId)
-    const netName = (net?.name ?? "").toLowerCase()
-    return (
-      ref.includes(normalizedQuery) ||
-      phone.includes(normalizedQuery) ||
-      netName.includes(normalizedQuery)
-    )
-  })
 
   const handleRowClick = (order: Order) => {
     setSelectedOrder(order)
@@ -107,32 +96,191 @@ export function AdminOrdersTable({
 
   const handleDrawerClose = () => {
     setDrawerOpen(false)
-    // Don't immediately null selectedOrder so the animation can finish
     setTimeout(() => setSelectedOrder(null), 300)
   }
 
   const handleOrderUpdated = useCallback((updated: Order) => {
-    // Update in local list immediately
     setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
-    // Also update the selected order so the drawer reflects new status
     setSelectedOrder(updated)
-    // Trigger a background refresh to stay in sync
     router.refresh()
   }, [router])
+
+  const filtered = useMemo(() => {
+    const sorted = [...orders].sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return tb - ta
+    })
+
+    const normalizedQuery = query.toLowerCase()
+    
+    // Calculate Date Boundaries using Ghana time (UTC+0)
+    const now = new Date()
+    
+    // Helper to get start of day in UTC (Ghana time)
+    const getStartOfDayUTC = (d: Date) => {
+      const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+      return utc.getTime()
+    }
+    
+    let fromTime = 0
+    let toTime = Infinity
+
+    if (dateFilter === "TODAY") {
+      fromTime = getStartOfDayUTC(now)
+    } else if (dateFilter === "YESTERDAY") {
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      fromTime = getStartOfDayUTC(yesterday)
+      toTime = getStartOfDayUTC(now) - 1
+    } else if (dateFilter === "7DAYS") {
+      const past = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      fromTime = getStartOfDayUTC(past)
+    } else if (dateFilter === "30DAYS") {
+      const past = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      fromTime = getStartOfDayUTC(past)
+    } else if (dateFilter === "CUSTOM") {
+      if (dateFrom) {
+        const [y, m, d] = dateFrom.split("-").map(Number)
+        fromTime = Date.UTC(y, m - 1, d)
+      }
+      if (dateTo) {
+        const [y, m, d] = dateTo.split("-").map(Number)
+        toTime = Date.UTC(y, m - 1, d, 23, 59, 59, 999)
+      }
+    }
+
+    return sorted.filter((o) => {
+      // 1. Text Search
+      if (normalizedQuery) {
+        const ref = (o.publicReference ?? "").toLowerCase()
+        const phone = (o.recipientPhone ?? "").toLowerCase()
+        const netObj = networks.find((n) => n.id === o.networkId)
+        const netName = (netObj?.name ?? "").toLowerCase()
+        
+        if (!ref.includes(normalizedQuery) && !phone.includes(normalizedQuery) && !netName.includes(normalizedQuery)) {
+          return false
+        }
+      }
+
+      // 2. Payment Filter (Default Operational)
+      if (paymentFilter === "OPERATIONAL") {
+        if (o.paymentStatus !== "SUCCESS" && o.paymentStatus !== "NOT_APPLICABLE") return false
+      } else if (paymentFilter !== "ALL") {
+        if (o.paymentStatus !== paymentFilter) return false
+      }
+
+      // 3. Network Filter
+      if (networkFilter !== "ALL") {
+        const netObj = networks.find((n) => n.id === o.networkId)
+        if (networkFilter === "MTN" && netObj?.name.toLowerCase() !== "mtn") return false
+        if (networkFilter === "TELECEL" && netObj?.name.toLowerCase() !== "telecel") return false
+        if (networkFilter === "AIRTELTIGO" && netObj?.name.toLowerCase() !== "airteltigo") return false
+      }
+
+      // 4. Fulfillment Filter
+      if (fulfillmentFilter !== "ALL") {
+        if (o.fulfillmentStatus !== fulfillmentFilter) return false
+      }
+
+      // 5. Date Filter
+      if (dateFilter !== "ALL") {
+        const orderTime = new Date(o.createdAt).getTime()
+        if (orderTime < fromTime || orderTime > toTime) return false
+      }
+
+      return true
+    })
+  }, [orders, query, networks, paymentFilter, networkFilter, fulfillmentFilter, dateFilter, dateFrom, dateTo])
 
   return (
     <>
       <Card>
         <CardContent className="p-0">
-          <div className="p-4 border-b">
-            <div className="relative max-w-sm">
-              <SearchIcon className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by reference, phone, network…"
-                className="pl-9 h-9"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
+          <div className="p-4 border-b space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between">
+              <div className="relative max-w-sm flex-1">
+                <SearchIcon className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by reference, phone, network…"
+                  className="pl-9 h-9"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <FilterIcon className="size-4" />
+                <span className="font-medium">Filters</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <select 
+                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                value={paymentFilter} 
+                onChange={(e) => setPaymentFilter(e.target.value)}
+              >
+                <option value="OPERATIONAL">Payment: Paid (Operational)</option>
+                <option value="ALL">Payment: All Attempts</option>
+                <option value="PENDING">Payment: Unpaid/Pending</option>
+                <option value="FAILED">Payment: Failed</option>
+                <option value="REFUNDED">Payment: Refunded</option>
+              </select>
+
+              <select 
+                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                value={networkFilter} 
+                onChange={(e) => setNetworkFilter(e.target.value)}
+              >
+                <option value="ALL">Network: All</option>
+                <option value="MTN">MTN</option>
+                <option value="TELECEL">Telecel</option>
+                <option value="AIRTELTIGO">AirtelTigo</option>
+              </select>
+
+              <select 
+                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                value={fulfillmentFilter} 
+                onChange={(e) => setFulfillmentFilter(e.target.value)}
+              >
+                <option value="ALL">Fulfillment: All</option>
+                <option value="PROCESSING">Processing</option>
+                <option value="ON_HOLD">On Hold</option>
+                <option value="SUCCESS">Delivered</option>
+                <option value="FAILED">Failed</option>
+                <option value="REFUNDED">Refunded</option>
+              </select>
+
+              <select 
+                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                value={dateFilter} 
+                onChange={(e) => setDateFilter(e.target.value)}
+              >
+                <option value="ALL">Date: All Time</option>
+                <option value="TODAY">Today</option>
+                <option value="YESTERDAY">Yesterday</option>
+                <option value="7DAYS">Last 7 Days</option>
+                <option value="30DAYS">Last 30 Days</option>
+                <option value="CUSTOM">Custom Range</option>
+              </select>
+
+              {dateFilter === "CUSTOM" && (
+                <div className="flex items-center gap-2">
+                  <Input 
+                    type="date" 
+                    className="h-9 w-auto" 
+                    value={dateFrom} 
+                    onChange={(e) => setDateFrom(e.target.value)} 
+                  />
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Input 
+                    type="date" 
+                    className="h-9 w-auto" 
+                    value={dateTo} 
+                    onChange={(e) => setDateTo(e.target.value)} 
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -160,7 +308,8 @@ export function AdminOrdersTable({
                       onClick={() => handleRowClick(order)}
                       className={cn(
                         "border-b last:border-0 hover:bg-primary/5 transition-colors cursor-pointer group",
-                        i % 2 === 0 ? "" : "bg-muted/10"
+                        i % 2 === 0 ? "" : "bg-muted/10",
+                        order.paymentStatus === "PENDING" ? "opacity-50" : ""
                       )}
                     >
                       <td className="px-4 py-3 font-mono font-medium">
@@ -237,7 +386,7 @@ export function AdminOrdersTable({
 
             {filtered.length === 0 && (
               <div className="py-16 text-center text-muted-foreground text-sm">
-                {query ? "No orders match your search." : "No orders yet."}
+                {query ? "No orders match your filters/search." : "No orders found."}
               </div>
             )}
           </div>

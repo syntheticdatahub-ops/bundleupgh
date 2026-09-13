@@ -2,64 +2,71 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUpIcon, PackageIcon, CheckCircleIcon, ClockIcon, XCircleIcon, CoinsIcon } from "lucide-react"
 import type { Order } from "@/types/domain"
 
+// An operational order is one where money was actually collected.
+// paymentStatus = SUCCESS: customer paid via Paystack.
+// paymentStatus = NOT_APPLICABLE: admin manual fulfillment (no customer payment needed).
+// All other paymentStatus values (PENDING, FAILED, REFUNDED) are NOT operational orders.
+function isOperational(order: Order): boolean {
+  return order.paymentStatus === "SUCCESS" || order.paymentStatus === "NOT_APPLICABLE";
+}
+
 export function StatsCards({ orders }: { orders: Order[] }) {
-  const totalOrders = orders.length;
-  
-  let successfulOrders = 0;
+  const operationalOrders = orders.filter(isOperational);
+  const totalOrders = operationalOrders.length;
+
+  let deliveredOrders = 0;
   let pendingOrders = 0;
   let failedOrders = 0;
   let totalRevenue = 0;
   let estimatedProfit = 0;
-  
-  for (const order of orders) {
-    const paymentSuccessful = order.paymentStatus === "SUCCESS";
-    const fulfillmentSuccessful = order.fulfillmentStatus === "SUCCESS";
-    const isSuccessful = paymentSuccessful || fulfillmentSuccessful;
-    const isPending = order.paymentStatus === "PENDING" || order.fulfillmentStatus === "PENDING" || order.fulfillmentStatus === "PROCESSING";
-    const isFailed = order.paymentStatus === "FAILED" || order.fulfillmentStatus === "FAILED" || order.fulfillmentStatus === "REFUNDED" || order.fulfillmentStatus === "REFUND_PENDING";
 
-    if (isSuccessful) {
-      successfulOrders++;
-      totalRevenue += order.sellingPriceSnapshot;
-      estimatedProfit += order.profitSnapshot;
-    } else if (isPending) {
+  for (const order of operationalOrders) {
+    const fs = order.fulfillmentStatus;
+
+    if (fs === "SUCCESS") {
+      deliveredOrders++;
+    } else if (fs === "PROCESSING" || fs === "ON_HOLD" || fs === "PENDING") {
       pendingOrders++;
-    } else if (isFailed) {
+    } else if (fs === "FAILED" || fs === "REFUNDED" || fs === "REFUND_PENDING") {
       failedOrders++;
     }
+
+    // Revenue and profit are based on all operational orders using their immutable snapshots.
+    totalRevenue += Number(order.sellingPriceSnapshot ?? 0);
+    estimatedProfit += Number(order.profitSnapshot ?? 0);
   }
 
   const cards = [
     {
       title: "Total Revenue",
-      value: `GHS ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      trend: "All time",
+      value: `GHS ${totalRevenue.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      trend: "Paid operational orders",
       trendUp: true,
       icon: TrendingUpIcon,
     },
     {
       title: "Total Orders",
       value: totalOrders.toLocaleString(),
-      trend: "All time",
+      trend: "Paid operational orders only",
       trendUp: true,
       icon: PackageIcon,
     },
     {
-      title: "Successful Orders",
-      value: successfulOrders.toLocaleString(),
-      trend: totalOrders > 0 ? `${((successfulOrders / totalOrders) * 100).toFixed(1)}% success rate` : "0% success rate",
+      title: "Delivered",
+      value: deliveredOrders.toLocaleString(),
+      trend: totalOrders > 0 ? `${((deliveredOrders / totalOrders) * 100).toFixed(1)}% success rate` : "0% success rate",
       trendUp: true,
       icon: CheckCircleIcon,
     },
     {
-      title: "Pending Orders",
+      title: "Pending Delivery",
       value: pendingOrders.toLocaleString(),
       trend: totalOrders > 0 ? `${((pendingOrders / totalOrders) * 100).toFixed(1)}% of orders` : "0% of orders",
       trendUp: false,
       icon: ClockIcon,
     },
     {
-      title: "Failed Orders",
+      title: "Failed / Issues",
       value: failedOrders.toLocaleString(),
       trend: totalOrders > 0 ? `${((failedOrders / totalOrders) * 100).toFixed(1)}% of orders` : "0% of orders",
       trendUp: false,
@@ -67,8 +74,8 @@ export function StatsCards({ orders }: { orders: Order[] }) {
     },
     {
       title: "Est. Profit",
-      value: `GHS ${estimatedProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      trend: "All time",
+      value: `GHS ${estimatedProfit.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      trend: "Based on stored profit snapshots",
       trendUp: true,
       icon: CoinsIcon,
     },

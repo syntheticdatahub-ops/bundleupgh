@@ -18,9 +18,10 @@ type OrderDetails = {
 
 function CallbackContent() {
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<"loading" | "success" | "on_hold" | "failed" | "pending">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "on_hold" | "processing" | "failed">("loading");
   const [message, setMessage] = useState("Verifying your payment...");
   const [details, setDetails] = useState<OrderDetails | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const reference = searchParams.get("reference") || searchParams.get("trxref") || "";
@@ -35,10 +36,19 @@ function CallbackContent() {
       .then(async (response) => {
         const data = await response.json();
 
+        if (data.orderId) setOrderId(data.orderId);
+        if (data.orderDetails) {
+          setDetails({ ...data.orderDetails, orderId: data.orderId });
+        }
+
+        // HTTP 202 = async MoMo — payment is being confirmed by the network
+        if (response.status === 202 && data.status === "processing") {
+          setStatus("processing");
+          setMessage(data.message ?? "Your payment is being confirmed. Please check back shortly.");
+          return;
+        }
+
         if (response.ok && data.success) {
-          if (data.orderDetails) {
-            setDetails({ ...data.orderDetails, orderId: data.orderId });
-          }
           // If DataMart put the order on hold (number needs verification), show specific UI
           if (data.fulfillmentStatus === "ON_HOLD") {
             setStatus("on_hold");
@@ -230,7 +240,58 @@ function CallbackContent() {
         </motion.div>
       )}
 
-      {(status === "failed" || status === "pending") && (
+      {status === "processing" && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: "spring", bounce: 0.3, duration: 0.6 }}
+        >
+          <div className="flex justify-center mb-6">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
+              className="bg-amber-500/10 text-amber-500 rounded-full p-4"
+            >
+              <Loader2Icon className="size-12 animate-spin" />
+            </motion.div>
+          </div>
+
+          <h1 className="text-2xl font-bold mb-2 tracking-tight">Payment processing</h1>
+          <p className="text-muted-foreground mb-6 text-sm leading-relaxed">{message}</p>
+
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-5 mb-6 text-left space-y-3">
+            <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">⏳ Waiting for network confirmation</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Your mobile money payment is being processed. This is normal for Telecel and AirtelTigo — the network
+              needs a moment to confirm your approval.
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <span className="font-medium text-foreground">Your money is safe.</span> If the payment goes through,
+              your data bundle will be sent automatically. You do not need to pay again.
+            </p>
+          </div>
+
+          {orderId && (
+            <p className="text-xs text-muted-foreground mb-6 font-mono">
+              Order reference: <span className="text-foreground font-medium">{orderId}</span>
+            </p>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link href={`/track${orderId ? `?ref=${orderId}` : ""}`} className="w-full sm:w-auto">
+              <Button className="w-full gap-2">
+                <ShieldCheckIcon className="size-4" /> Check Order Status
+              </Button>
+            </Link>
+            <Link href="/help" className="w-full sm:w-auto">
+              <Button variant="outline" className="w-full">Get Help</Button>
+            </Link>
+          </div>
+        </motion.div>
+      )}
+
+      {status === "failed" && (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="py-4">
           <AlertCircleIcon className="size-12 text-red-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">Payment not verified</h1>

@@ -5,7 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Order } from "@/types/domain"
 
 export function RevenueChart({ orders }: { orders: Order[] }) {
-  const successfulOrders = orders.filter((o) => o.paymentStatus === "SUCCESS" || o.fulfillmentStatus === "SUCCESS");
+  // Operational orders only — paymentStatus SUCCESS means money was actually collected.
+  const successfulOrders = orders.filter(
+    (o) => o.paymentStatus === "SUCCESS" || o.paymentStatus === "NOT_APPLICABLE"
+  );
 
   if (successfulOrders.length === 0) {
     return (

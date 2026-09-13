@@ -9,7 +9,6 @@ import {
   LayoutDashboardIcon,
   LifeBuoyIcon,
   PackageIcon,
-  SettingsIcon,
   UsersIcon,
   ZapIcon,
 } from "lucide-react"
@@ -76,11 +75,6 @@ const data = {
       title: "Notifications",
       url: "/admin/notifications",
       icon: BellIcon,
-    },
-    {
-      title: "Settings",
-      url: "/admin/settings",
-      icon: SettingsIcon,
     },
     {
       title: "Help & Support",

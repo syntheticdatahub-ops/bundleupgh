@@ -61,8 +61,22 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, status: "failed", reference, orderId: order.publicReference });
     }
 
-    if (verification.status !== "success") {
-      return NextResponse.json({ success: false, status: verification.status, reference }, { status: 400 });
+    // Paystack async states — common with Telecel/AirtelTigo mobile money where
+    // the USSD approval completes AFTER the customer is redirected back to us.
+    // These are NOT failures. The webhook (charge.success) will confirm payment.
+    // Return 202 so the callback UI can show a "processing" state rather than an error.
+    const asyncStates = ["ongoing", "pay_offline", "processing", "pending"];
+    if (asyncStates.includes(verification.status)) {
+      return NextResponse.json(
+        {
+          success: false,
+          status: "processing",
+          message: "Your payment is being confirmed by your network. This usually takes 1–3 minutes for mobile money. Please check your order status shortly.",
+          reference,
+          orderId: order.publicReference,
+        },
+        { status: 202 }
+      );
     }
 
     const snapshotAmount = Number(order.sellingPriceSnapshot ?? 0);
