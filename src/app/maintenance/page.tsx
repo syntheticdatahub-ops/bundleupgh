@@ -3,8 +3,8 @@ import { getMaintenanceState } from "@/lib/maintenance";
 
 export const dynamic = "force-dynamic";
 
-export default function MaintenancePage() {
-  const state = getMaintenanceState();
+export default async function MaintenancePage() {
+  const state = await getMaintenanceState();
 
   if (!state.enabled) {
     redirect("/");

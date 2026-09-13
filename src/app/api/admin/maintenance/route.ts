@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionJwt } from "@/lib/auth-verify";
-import { DEFAULT_MAINTENANCE_MESSAGE, getMaintenanceState, setMaintenanceState } from "@/lib/maintenance";
+import { DEFAULT_MAINTENANCE_MESSAGE, getMaintenanceState, makeMaintenanceCookieValue, setMaintenanceState } from "@/lib/maintenance";
 
 function isAdminUser(user: { uid: string; email?: string } | null) {
   if (!user) return false;
@@ -32,7 +32,7 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const state = getMaintenanceState();
+    const state = await getMaintenanceState();
     return NextResponse.json({
       enabled: state.enabled,
       message: state.message,
@@ -67,12 +67,22 @@ export async function POST(req: Request) {
       message: message && message.trim().length > 0 ? message.trim() : DEFAULT_MAINTENANCE_MESSAGE,
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       enabled: updated.enabled,
       message: updated.message,
       updatedAt: updated.updatedAt,
       source: updated.source,
     });
+
+    response.cookies.set("maintenance_state", makeMaintenanceCookieValue(updated), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+
+    return response;
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Unable to update maintenance state" }, { status: 500 });
   }

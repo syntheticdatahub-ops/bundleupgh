@@ -4,8 +4,10 @@ import { SupportWidget } from "@/components/support/support-widget"
 import { redirect } from "next/navigation"
 import { getMaintenanceState } from "@/lib/maintenance"
 
-export default function PublicLayout({ children }: { children: React.ReactNode }) {
-  const state = getMaintenanceState()
+export const dynamic = "force-dynamic"
+
+export default async function PublicLayout({ children }: { children: React.ReactNode }) {
+  const state = await getMaintenanceState()
 
   if (state.enabled) {
     redirect("/maintenance")

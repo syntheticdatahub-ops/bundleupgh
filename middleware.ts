@@ -5,8 +5,34 @@ const PUBLIC_PATHS = ["/", "/buy", "/about", "/privacy", "/terms", "/refund-poli
 const ADMIN_PATH_PREFIXES = ["/admin", "/sign-in", "/api/admin", "/api/auth"];
 const WEBHOOK_PATH_PREFIXES = ["/api/payments/webhook", "/api/webhooks/datamart", "/api/payments/verify"];
 
-function isMaintenanceModeForcedOn(): boolean {
-  return (process.env.MAINTENANCE_MODE || "").trim().toLowerCase() === "on";
+function parseMaintenanceCookie(rawValue: string | null | undefined) {
+  if (!rawValue) {
+    return { enabled: true, message: "" };
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as { enabled?: boolean; message?: string };
+    return {
+      enabled: parsed.enabled === true,
+      message: typeof parsed.message === "string" ? parsed.message : "",
+    };
+  } catch {
+    return { enabled: true, message: "" };
+  }
+}
+
+function isMaintenanceModeForcedOn(request: NextRequest) {
+  const envValue = (process.env.MAINTENANCE_MODE || "").trim().toLowerCase();
+  if (envValue === "on") {
+    return true;
+  }
+
+  if (envValue === "off") {
+    return false;
+  }
+
+  const cookieState = parseMaintenanceCookie(request.cookies.get("maintenance_state")?.value ?? null);
+  return cookieState.enabled;
 }
 
 export function middleware(request: NextRequest) {
@@ -31,7 +57,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!isMaintenanceModeForcedOn()) {
+  if (!isMaintenanceModeForcedOn(request)) {
     return NextResponse.next();
   }
 

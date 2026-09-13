@@ -97,7 +97,7 @@ export function readMaintenanceState(forceRefresh = false): MaintenanceState {
 }
 
 export function getMaintenanceState(): MaintenanceState {
-  return readMaintenanceState();
+  return readMaintenanceState(true);
 }
 
 export function isMaintenanceModeEnabled(): boolean {

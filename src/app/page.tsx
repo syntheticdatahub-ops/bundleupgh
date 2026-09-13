@@ -12,7 +12,7 @@ import { getMaintenanceState } from "@/lib/maintenance"
 export const dynamic = "force-dynamic"
 
 export default async function HomePage() {
-  const maintenance = getMaintenanceState()
+  const maintenance = await getMaintenanceState()
   if (maintenance.enabled) {
     redirect("/maintenance")
   }
