@@ -29,7 +29,7 @@ const data = {
   user: {
     name: "Admin User",
     email: "admin@bundleup.com.gh",
-    avatar: "/avatars/shadcn.jpg",
+    avatar: "/avatars/user.jpg",
   },
   navManagement: [
     {
