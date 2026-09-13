@@ -20,7 +20,9 @@ export function AdminTransactionsTable({ orders }: { orders: Order[] }) {
       orderId: o.publicReference,
       provider: "Mock Payment", // TODO: Update when Paystack is integrated
       amount: o.sellingPriceSnapshot,
-      status: o.paymentStatus === "SUCCESS" ? "SUCCESS" : o.fulfillmentStatus,
+      status: (o.paymentStatus || "").toUpperCase() === "SUCCESS" || (o.paymentStatus || "").toUpperCase() === "PAID"
+        ? "SUCCESS"
+        : (o.fulfillmentStatus || "").toUpperCase(),
       date: new Date(o.createdAt).toLocaleString(),
     }))
 

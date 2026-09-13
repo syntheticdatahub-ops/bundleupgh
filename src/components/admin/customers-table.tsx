@@ -19,7 +19,10 @@ export function AdminCustomersTable({ customers, orders }: { customers: Customer
       return oPhoneLocal === cPhoneLocal || oPhoneLocal.includes(cPhoneLocal.slice(-9));
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     
-    const successfulOrders = customerOrders.filter(o => o.fulfillmentStatus === "SUCCESS");
+    const successfulOrders = customerOrders.filter(o => {
+      const fs = (o.fulfillmentStatus || "").toUpperCase();
+      return fs === "SUCCESS" || fs === "DELIVERED";
+    });
     
     return {
       ...c,

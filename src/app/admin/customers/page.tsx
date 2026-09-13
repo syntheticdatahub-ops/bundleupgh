@@ -24,7 +24,7 @@ export default async function AdminCustomersPage() {
           <div className="w-px h-8 bg-border"></div>
           <div className="flex flex-col">
             <span className="text-muted-foreground text-xs">Total Orders</span>
-            <span className="font-bold">{orders.filter(o => o.fulfillmentStatus === "SUCCESS").length}</span>
+            <span className="font-bold">{orders.filter(o => { const fs = (o.fulfillmentStatus || "").toUpperCase(); return fs === "SUCCESS" || fs === "DELIVERED"; }).length}</span>
           </div>
         </div>
       </div>

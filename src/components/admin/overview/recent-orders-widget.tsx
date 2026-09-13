@@ -81,10 +81,10 @@ export function RecentOrdersWidget({ orders, networks }: { orders: Order[], netw
                     variant="secondary"
                     className={cn(
                       "bg-opacity-10 hidden sm:inline-flex text-[10px] tracking-wider font-bold",
-                      fulfillmentColors[order.fulfillmentStatus] || ""
+                      fulfillmentColors[(order.fulfillmentStatus || "").toUpperCase()] || ""
                     )}
                   >
-                    {order.fulfillmentStatus}
+                    {(order.fulfillmentStatus || "").toUpperCase() === "DELIVERED" ? "Delivered" : order.fulfillmentStatus}
                   </Badge>
                 </div>
               </div>
