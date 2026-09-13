@@ -492,15 +492,18 @@ function LiveDeliveryTracker({
     let active = true
     notifiedRef.current = false
 
-    const fetchStatus = async () => {
+    const isTerminal = (s?: string): boolean =>
+      s === "SUCCESS" || s === "FAILED" || s === "REFUNDED"
+
+    const fetchStatus = async (): Promise<TrackerData | null> => {
       try {
         const res = await fetch(`/api/track/delivery?reference=${encodeURIComponent(publicReference)}`)
         const json: TrackerData = await res.json()
-        if (!active) return
+        if (!active) return null
         setData(json)
 
-        // If BundleUp Firestore status changed (e.g. PROCESSING → ON_HOLD → SUCCESS),
-        // notify the parent to re-fetch and refresh the order panel exactly once.
+        // If BundleUp Firestore status changed (e.g. PROCESSING to ON_HOLD to
+        // SUCCESS), notify the parent to re-fetch the order panel exactly once.
         if (
           json.bundleupStatus &&
           json.bundleupStatus !== currentStatus &&
@@ -509,15 +512,29 @@ function LiveDeliveryTracker({
           notifiedRef.current = true
           onStatusChanged(publicReference)
         }
+        return json
       } catch {
-        // silent
+        return null
       }
     }
-    fetchStatus()
-    const int = setInterval(fetchStatus, 5000)
+
+    let int: ReturnType<typeof setInterval> | undefined
+    const tick = async () => {
+      // Stop polling once delivery reaches a terminal state so we no longer
+      // issue a Firestore read every 5s for completed/failed orders.
+      const json = await fetchStatus()
+      if (isTerminal(json?.bundleupStatus)) {
+        if (int) clearInterval(int)
+      }
+    }
+
+    // Poll once immediately, then keep polling every 5s until the order is terminal.
+    tick()
+    int = setInterval(tick, 5000)
+
     return () => {
       active = false
-      clearInterval(int)
+      if (int) clearInterval(int)
     }
   }, [publicReference, currentStatus, onStatusChanged])
 

@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { fsUpdate } from "@/lib/firestore-rest";
 import { cookies } from "next/headers";
 import { verifySessionJwt } from "@/lib/auth-verify";
+import { fsGet, fsUpdate } from "@/lib/firestore-rest";
+import { invalidateBundlesCache } from "@/lib/bundles";
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  req: Request,
+  context: { params: Promise<{ id: string }> | { id: string } }
+) {
   try {
     const cookieStore = await cookies();
     const session = cookieStore.get("session");
@@ -17,24 +21,50 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await params;
-    const body = await req.json();
-
-    const { sellingPrice, active } = body;
-
-    if (typeof sellingPrice !== "number" || sellingPrice < 0) {
-      return NextResponse.json({ error: "Invalid selling price" }, { status: 400 });
+    const resolvedParams = await Promise.resolve(context.params);
+    const bundleId = resolvedParams.id;
+    if (!bundleId) {
+      return NextResponse.json({ error: "Missing bundle ID" }, { status: 400 });
     }
 
-    await fsUpdate("bundles", id, {
-      sellingPrice,
-      active: Boolean(active),
-      updatedAt: new Date().toISOString(),
-    });
+    const body = await req.json();
+    const sellingPrice = Number(body.sellingPrice);
+    const activeValue = body.active;
 
-    return NextResponse.json({ success: true });
+    if (!Number.isFinite(sellingPrice) || sellingPrice < 0) {
+      return NextResponse.json({ error: "Valid selling price is required." }, { status: 400 });
+    }
+
+    const bundle = await fsGet("bundles", bundleId);
+    if (!bundle) {
+      return NextResponse.json({ error: "Bundle not found" }, { status: 404 });
+    }
+
+    const nextPayload: Record<string, unknown> = {
+      sellingPrice,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (typeof activeValue === "boolean") {
+      nextPayload.active = activeValue;
+    }
+
+    await fsUpdate("bundles", bundleId, nextPayload);
+    invalidateBundlesCache();
+
+    return NextResponse.json({
+      success: true,
+      bundle: {
+        ...(bundle as Record<string, unknown>),
+        ...nextPayload,
+      },
+    });
   } catch (error: any) {
-    console.error("Update Bundle Error:", error);
-    return NextResponse.json({ error: error.message || "Failed to update bundle" }, { status: 500 });
+    console.error("[Admin Bundle Update Route] Error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Failed to update bundle." },
+      { status: 500 }
+    );
   }
 }
+

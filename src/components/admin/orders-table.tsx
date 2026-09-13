@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -63,9 +63,15 @@ function formatDate(iso: string) {
 export function AdminOrdersTable({
   initialOrders,
   networks,
+  currentPage,
+  hasNextPage,
+  nextCursor,
 }: {
   initialOrders: Order[]
   networks: Network[]
+  currentPage: number
+  hasNextPage: boolean
+  nextCursor?: string
 }) {
   const [query, setQuery] = useState("")
   
@@ -81,15 +87,18 @@ export function AdminOrdersTable({
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     setOrders(initialOrders)
   }, [initialOrders])
 
-  useEffect(() => {
-    const interval = setInterval(() => router.refresh(), 10000)
-    return () => clearInterval(interval)
-  }, [router])
+  // Auto-refresh loop removed (Phase 1 of the Firestore read audit): this
+  // previously called router.refresh() every 10s, which re-rendered the entire
+  // admin server component and re-read the whole /orders + /networks
+  // collections each time. Data now refreshes via explicit actions (e.g.
+  // handleOrderUpdated after a status mutation) or a full page navigation.
 
   const handleRowClick = (order: Order) => {
     setSelectedOrder(order)
@@ -106,6 +115,26 @@ export function AdminOrdersTable({
     setSelectedOrder(updated)
     router.refresh()
   }, [router])
+
+  const changePage = useCallback((nextPage: number) => {
+    const params = new URLSearchParams(searchParams.toString())
+    const safePage = Math.max(1, nextPage)
+
+    if (safePage <= 1) {
+      params.delete("page")
+      params.delete("cursor")
+    } else {
+      params.set("page", String(safePage))
+      if (safePage === currentPage + 1 && nextCursor) {
+        params.set("cursor", nextCursor)
+      } else if (safePage < currentPage) {
+        params.delete("cursor")
+      }
+    }
+
+    const queryString = params.toString()
+    router.push(queryString ? `${pathname}?${queryString}` : pathname)
+  }, [currentPage, nextCursor, pathname, router, searchParams])
 
   const filtered = useMemo(() => {
     const sorted = [...orders].sort((a, b) => {
@@ -396,6 +425,30 @@ export function AdminOrdersTable({
           </div>
         </CardContent>
       </Card>
+
+      <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-3">
+        <div className="text-xs text-muted-foreground">
+          Page {currentPage}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => changePage(currentPage - 1)}
+            disabled={currentPage <= 1}
+            className="h-9 rounded-md border px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            onClick={() => changePage(currentPage + 1)}
+            disabled={!hasNextPage}
+            className="h-9 rounded-md border px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
 
       <OrderDetailDrawer
         order={selectedOrder}

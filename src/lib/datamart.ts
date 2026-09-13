@@ -154,17 +154,17 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
   }
 }
 
-export async function syncDataMartOrderStatus(order: Order): Promise<void> {
+export async function syncDataMartOrderStatus(order: Order): Promise<Order["fulfillmentStatus"] | null> {
   if (
     order.fulfillmentStatus === "SUCCESS" || 
     order.fulfillmentStatus === "FAILED" || 
     order.fulfillmentStatus === "REFUNDED"
   ) {
-    return; // Already terminal — nothing to sync
+    return null; // Already terminal — nothing to sync
   }
 
   const reference = order.fulfillmentProviderReference || order.providerReference;
-  if (!reference) return;
+  if (!reference) return null;
 
   try {
     const response = await dataMartRequest<any>(`/api/developer/order-status/${encodeURIComponent(reference)}`, "GET");
@@ -211,10 +211,13 @@ export async function syncDataMartOrderStatus(order: Order): Promise<void> {
       });
 
       console.log(`[syncDataMartOrderStatus] ${order.id}: ${order.fulfillmentStatus} → ${newFulfillmentStatus} (DataMart: ${orderStatus})`);
+      return newFulfillmentStatus;
     } else {
       console.warn(`[syncDataMartOrderStatus] Unexpected response for ${order.id}:`, JSON.stringify(response).slice(0, 200));
+      return null;
     }
   } catch (error: any) {
     console.error(`DataMart status sync failed for ${order.id}:`, error);
+    return null;
   }
 }

@@ -154,42 +154,59 @@ export async function fsGet(collection: string, docId: string): Promise<any | nu
   return docToObject(doc);
 }
 
+function buildWhereClause(
+  filters: Array<{ field: string; op: string; value: any }> = [],
+  groupOp: "AND" | "OR" = "AND",
+): any | undefined {
+  if (filters.length === 0) return undefined;
+  if (filters.length === 1) {
+    return {
+      fieldFilter: {
+        field: { fieldPath: filters[0].field },
+        op: filters[0].op,
+        value: toFirestoreValue(filters[0].value),
+      },
+    };
+  }
+
+  return {
+    compositeFilter: {
+      op: groupOp,
+      filters: filters.map((f) => ({
+        fieldFilter: {
+          field: { fieldPath: f.field },
+          op: f.op,
+          value: toFirestoreValue(f.value),
+        },
+      })),
+    },
+  };
+}
+
+function buildOrderByClauses(orderBy?: { field: string; direction?: "ASCENDING" | "DESCENDING" } | Array<{ field: string; direction?: "ASCENDING" | "DESCENDING" }>) {
+  const entries = Array.isArray(orderBy) ? orderBy : orderBy ? [orderBy] : [];
+  return entries.map((o) => ({
+    field: { fieldPath: o.field },
+    direction: o.direction ?? "ASCENDING",
+  }));
+}
+
 export async function fsQuery(
   collection: string,
   filters: Array<{ field: string; op: string; value: any }> = [],
-  orderBy?: { field: string; direction?: "ASCENDING" | "DESCENDING" },
+  orderBy?: { field: string; direction?: "ASCENDING" | "DESCENDING" } | Array<{ field: string; direction?: "ASCENDING" | "DESCENDING" }>,
   limit?: number,
+  cursor?: { values: any[]; mode?: "startAt" | "startAfter" },
 ): Promise<any[]> {
   const token = await getAccessToken();
-
-  const where = filters.length > 0
-    ? filters.length === 1
-      ? {
-          fieldFilter: {
-            field: { fieldPath: filters[0].field },
-            op: filters[0].op,
-            value: toFirestoreValue(filters[0].value),
-          },
-        }
-      : {
-          compositeFilter: {
-            op: "AND",
-            filters: filters.map((f) => ({
-              fieldFilter: {
-                field: { fieldPath: f.field },
-                op: f.op,
-                value: toFirestoreValue(f.value),
-              },
-            })),
-          },
-        }
-    : undefined;
+  const where = buildWhereClause(filters);
 
   const body: any = {
     structuredQuery: {
       from: [{ collectionId: collection }],
       ...(where ? { where } : {}),
-      ...(orderBy ? { orderBy: [{ field: { fieldPath: orderBy.field }, direction: orderBy.direction ?? "ASCENDING" }] } : {}),
+      ...(orderBy ? { orderBy: buildOrderByClauses(orderBy) } : {}),
+      ...(cursor?.values?.length ? { [cursor.mode ?? "startAfter"]: { values: cursor.values.map((v) => toFirestoreValue(v)) } } : {}),
       ...(limit ? { limit } : {}),
     },
   };
@@ -221,6 +238,43 @@ export async function fsQuery(
   return results
     .filter((r: any) => r.document)
     .map((r: any) => docToObject(r.document));
+}
+
+export async function fsCount(
+  collection: string,
+  filters: Array<{ field: string; op: string; value: any }> = [],
+  groupOp: "AND" | "OR" = "AND",
+): Promise<number> {
+  const token = await getAccessToken();
+  const where = buildWhereClause(filters, groupOp);
+
+  const body = {
+    structuredQuery: {
+      from: [{ collectionId: collection }],
+      ...(where ? { where } : {}),
+    },
+    aggregations: [{ count: {} }],
+  };
+
+  const bodyStr = JSON.stringify(body);
+  const response = await httpsRequest({
+    hostname: BASE,
+    path: `/v1/projects/${projectId}/databases/(default)/documents:runAggregationQuery`,
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(bodyStr),
+    },
+  }, bodyStr);
+
+  const data = JSON.parse(response);
+  if (data.error) {
+    throw new Error(`Firestore aggregation failed: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+
+  const aggregateValue = Array.isArray(data) ? data[0]?.aggregateFields?.count?.integerValue : undefined;
+  return Number(aggregateValue ?? 0);
 }
 
 export async function fsSet(collection: string, docId: string, data: Record<string, any>, merge: boolean = false): Promise<any> {

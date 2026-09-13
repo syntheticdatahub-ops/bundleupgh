@@ -8,7 +8,7 @@ const DATAMART_BASE_URL = "api.datamartgh.shop";
 
 /**
  * Maps a raw DataMart order/track status string to a clean label for the UI.
- * DataMart's envelope always has status:"success" for a valid HTTP response —
+ * DataMart's envelope always has status:"success" for a valid HTTP response â€”
  * the actual delivery state lives inside response.data.
  */
 function mapDataMartStatus(rawStatus: string | undefined): string {
@@ -37,7 +37,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Missing reference" }, { status: 400 });
     }
 
-    let order = await getOrderByPublicReference(publicRef);
+    const order = await getOrderByPublicReference(publicRef);
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
@@ -48,11 +48,14 @@ export async function GET(req: Request) {
     }
 
     // If the order is non-terminal, AWAIT reconciliation so Firestore is updated
-    // before we respond, then re-fetch to get the latest authoritative status.
+    // before we respond. syncDataMartOrderStatus now returns the freshly-written
+    // fulfillment status so we can use it directly instead of re-reading the same
+    // order from Firestore (removes a redundant lookup per poll).
     if (order.fulfillmentStatus === "PROCESSING" || order.fulfillmentStatus === "ON_HOLD") {
-      await syncDataMartOrderStatus(order).catch(console.error);
-      const refreshed = await getOrderByPublicReference(publicRef);
-      if (refreshed) order = refreshed;
+      const syncedStatus = await syncDataMartOrderStatus(order).catch(() => null);
+      if (syncedStatus) {
+        order.fulfillmentStatus = syncedStatus;
+      }
     }
 
     const bundleupStatus = order.fulfillmentStatus;

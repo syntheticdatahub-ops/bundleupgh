@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { fsQuery } from "@/lib/firestore-rest";
-import { normalizePhone, generatePhoneVariants } from "@/lib/phone";
+import { findOrdersByRecipientPhone } from "@/lib/orders";
+import { normalizePhone } from "@/lib/phone";
 
 export const runtime = "nodejs";
 
@@ -59,23 +59,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const variants = generatePhoneVariants(rawPhone);
-
-    // Query Firestore for each variant and deduplicate by document ID
-    const seen = new Set<string>();
-    const allOrders: any[] = [];
-
-    for (const variant of variants) {
-      const docs = await fsQuery("orders", [
-        { field: "recipientPhone", op: "EQUAL", value: variant },
-      ]);
-      for (const doc of docs) {
-        if (!seen.has(doc.id)) {
-          seen.add(doc.id);
-          allOrders.push(doc);
-        }
-      }
-    }
+    const allOrders: any[] = await findOrdersByRecipientPhone(normalized);
 
     // Only surface operational (paid) orders to customers.
     // Unpaid/abandoned checkout attempts (paymentStatus = PENDING or FAILED)

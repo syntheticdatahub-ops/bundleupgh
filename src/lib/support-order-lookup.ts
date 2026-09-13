@@ -1,5 +1,5 @@
-import { fsQuery } from "@/lib/firestore-rest";
-import { generatePhoneVariants, normalizePhone } from "@/lib/phone";
+import { findOrdersByRecipientPhone } from "@/lib/orders";
+import { normalizePhone } from "@/lib/phone";
 
 export type SupportOrder = {
   id: string;
@@ -17,7 +17,7 @@ export type SupportOrder = {
 export function maskPhone(phone: string): string {
   const clean = phone.replace(/\D/g, "");
   if (clean.length <= 6) return "****";
-  return clean.slice(0, 3) + "••••" + clean.slice(-2);
+  return clean.slice(0, 3) + "Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢" + clean.slice(-2);
 }
 
 export function toSupportOrder(doc: any): SupportOrder {
@@ -41,19 +41,7 @@ export async function lookupOrdersByPhoneNumber(rawPhone: string, limit = 5): Pr
     return [];
   }
 
-  const variants = Array.from(new Set(generatePhoneVariants(normalized)));
-  const seen = new Set<string>();
-  const allOrders: any[] = [];
-
-  for (const variant of variants) {
-    const docs = await fsQuery("orders", [{ field: "recipientPhone", op: "EQUAL", value: variant }]);
-    for (const doc of docs) {
-      if (!seen.has(doc.id)) {
-        seen.add(doc.id);
-        allOrders.push(doc);
-      }
-    }
-  }
+  const allOrders: any[] = await findOrdersByRecipientPhone(normalized);
 
   allOrders.sort((a, b) => {
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;

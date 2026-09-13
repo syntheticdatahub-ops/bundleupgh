@@ -1,42 +1,49 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { SearchIcon } from "lucide-react"
-import { normalizePhone } from "@/lib/phone"
-import type { Customer, Order } from "@/types/domain"
+import type { CustomerPageRow } from "@/lib/customers"
 
-export function AdminCustomersTable({ customers, orders }: { customers: Customer[], orders: Order[] }) {
+export function AdminCustomersTable({
+  customers,
+  currentPage,
+  hasNextPage,
+  nextCursor,
+}: {
+  customers: CustomerPageRow[]
+  currentPage: number
+  hasNextPage: boolean
+  nextCursor?: string
+}) {
   const [query, setQuery] = useState("")
-  
-  const enrichedCustomers = customers.map((c) => {
-    // Normalize both customer phone and order phones to match reliably
-    const cPhoneLocal = normalizePhone?.(c.phone) || c.phone.replace(/\D/g, "");
-    
-    const customerOrders = orders.filter(o => {
-      const oPhoneLocal = normalizePhone?.(o.recipientPhone) || o.recipientPhone.replace(/\D/g, "");
-      return oPhoneLocal === cPhoneLocal || oPhoneLocal.includes(cPhoneLocal.slice(-9));
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    const successfulOrders = customerOrders.filter(o => {
-      const fs = (o.fulfillmentStatus || "").toUpperCase();
-      return fs === "SUCCESS" || fs === "DELIVERED";
-    });
-    
-    return {
-      ...c,
-      totalOrders: successfulOrders.length,
-      totalSpent: successfulOrders.reduce((sum, o) => sum + (o.sellingPriceSnapshot || 0), 0),
-      lastNetworkId: customerOrders[0]?.networkId || "Unknown",
-      lastOrderDate: customerOrders[0] ? new Date(customerOrders[0].createdAt).toLocaleDateString() : "Never",
-      lastOrderTimestamp: customerOrders[0] ? new Date(customerOrders[0].createdAt).getTime() : 0,
-      status: successfulOrders.length > 0 ? "active" : "inactive",
-      displayPhone: cPhoneLocal.length === 10 ? `+233 ${cPhoneLocal.slice(1).replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}` : c.phone,
-    }
-  }).sort((a, b) => b.lastOrderTimestamp - a.lastOrderTimestamp)
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
 
-  const filtered = enrichedCustomers.filter(
+  const changePage = useCallback((nextPage: number) => {
+    const params = new URLSearchParams(searchParams.toString())
+    const safePage = Math.max(1, nextPage)
+
+    if (safePage <= 1) {
+      params.delete("page")
+      params.delete("cursor")
+    } else {
+      params.set("page", String(safePage))
+      if (safePage === currentPage + 1 && nextCursor) {
+        params.set("cursor", nextCursor)
+      } else if (safePage < currentPage) {
+        params.delete("cursor")
+      }
+    }
+
+    const queryString = params.toString()
+    router.push(queryString ? `${pathname}?${queryString}` : pathname)
+  }, [currentPage, nextCursor, pathname, router, searchParams])
+
+  const filtered = customers.filter(
     (c) =>
       c.phone.toLowerCase().includes(query.toLowerCase()) ||
       c.lastNetworkId.toLowerCase().includes(query.toLowerCase())
@@ -107,6 +114,28 @@ export function AdminCustomersTable({ customers, orders }: { customers: Customer
               No customers found.
             </div>
           )}
+        </div>
+
+        <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-3">
+          <div className="text-xs text-muted-foreground">Page {currentPage}</div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => changePage(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="h-9 rounded-md border px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => changePage(currentPage + 1)}
+              disabled={!hasNextPage}
+              className="h-9 rounded-md border px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </CardContent>
     </Card>
