@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
 export const DEFAULT_MAINTENANCE_MESSAGE =
-  "Oops, sorry… Play Ato is making a few changes for a better experience. Sorry for any inconvenience.";
+  "Oops, sorry…We are making a few changes for a better experience. Sorry for any inconvenience.";
 
 export type MaintenanceState = {
   enabled: boolean;
