@@ -105,6 +105,8 @@ function toFirestoreValue(v: any): any {
   if (typeof v === "number") return { doubleValue: v };
   if (Array.isArray(v)) return { arrayValue: { values: v.map(toFirestoreValue) } };
   if (typeof v === "object") {
+    if (typeof v.referenceValue === "string") return { referenceValue: v.referenceValue };
+    if (typeof v.__firestoreRefPath === "string") return { referenceValue: v.__firestoreRefPath };
     const fields: Record<string, any> = {};
     for (const [k, val] of Object.entries(v)) fields[k] = toFirestoreValue(val);
     return { mapValue: { fields } };

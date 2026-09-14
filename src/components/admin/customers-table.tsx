@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { decodeCursorState, encodeCursorState } from "@/lib/pagination"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { SearchIcon } from "lucide-react"
@@ -26,6 +27,7 @@ export function AdminCustomersTable({
   const changePage = useCallback((nextPage: number) => {
     const params = new URLSearchParams(searchParams.toString())
     const safePage = Math.max(1, nextPage)
+    const cursorState = decodeCursorState(params.get("cursor"))
 
     if (safePage <= 1) {
       params.delete("page")
@@ -33,9 +35,15 @@ export function AdminCustomersTable({
     } else {
       params.set("page", String(safePage))
       if (safePage === currentPage + 1 && nextCursor) {
-        params.set("cursor", nextCursor)
+        const nextCursorState = [...cursorState, nextCursor]
+        params.set("cursor", encodeCursorState(nextCursorState))
       } else if (safePage < currentPage) {
-        params.delete("cursor")
+        const previousCursorState = cursorState.slice(0, Math.max(0, safePage - 1))
+        if (previousCursorState.length > 0) {
+          params.set("cursor", encodeCursorState(previousCursorState))
+        } else {
+          params.delete("cursor")
+        }
       }
     }
 

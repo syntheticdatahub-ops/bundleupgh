@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { decodeCursorState, encodeCursorState } from "@/lib/pagination"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -119,6 +120,7 @@ export function AdminOrdersTable({
   const changePage = useCallback((nextPage: number) => {
     const params = new URLSearchParams(searchParams.toString())
     const safePage = Math.max(1, nextPage)
+    const cursorState = decodeCursorState(params.get("cursor"))
 
     if (safePage <= 1) {
       params.delete("page")
@@ -126,9 +128,15 @@ export function AdminOrdersTable({
     } else {
       params.set("page", String(safePage))
       if (safePage === currentPage + 1 && nextCursor) {
-        params.set("cursor", nextCursor)
+        const nextCursorState = [...cursorState, nextCursor]
+        params.set("cursor", encodeCursorState(nextCursorState))
       } else if (safePage < currentPage) {
-        params.delete("cursor")
+        const previousCursorState = cursorState.slice(0, Math.max(0, safePage - 1))
+        if (previousCursorState.length > 0) {
+          params.set("cursor", encodeCursorState(previousCursorState))
+        } else {
+          params.delete("cursor")
+        }
       }
     }
 

@@ -1,5 +1,6 @@
 import { fsQuery, fsAdd, fsCount } from "./firestore-rest";
 import { findOrdersByRecipientPhone } from "./orders";
+import { decodeCursor as decodeCursorToken, decodeCursorState, encodeCursor as encodeCursorToken, encodeCursorState } from "./pagination";
 import type { Customer } from "@/types/domain";
 
 export const DEFAULT_CUSTOMER_PAGE_SIZE = 25;
@@ -15,18 +16,14 @@ export type CustomerPageRow = Customer & {
 };
 
 export function encodeCursor(doc: Pick<Customer, "id" | "createdAt">): string {
-  return Buffer.from(JSON.stringify({ id: doc.id, createdAt: doc.createdAt })).toString("base64");
+  return encodeCursorToken(doc, "customers");
 }
 
-export function decodeCursor(token: string): { id: string; createdAt: string } | null {
-  try {
-    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
-    if (!decoded || typeof decoded.id !== "string" || typeof decoded.createdAt !== "string") return null;
-    return { id: decoded.id, createdAt: decoded.createdAt };
-  } catch {
-    return null;
-  }
+export function decodeCursor(token: string): { id: string; createdAt: string; docPath: string } | null {
+  return decodeCursorToken(token, "customers");
 }
+
+export { encodeCursorState, decodeCursorState };
 
 export async function getCustomers(): Promise<Customer[]> {
   const docs = await fsQuery("customers", [], { field: "createdAt", direction: "DESCENDING" });
@@ -54,13 +51,15 @@ export async function getCustomersPage({
 }> {
   const safePage = Math.max(1, Number(page) || 1);
   const safePageSize = Math.max(1, Number(pageSize) || DEFAULT_CUSTOMER_PAGE_SIZE);
+  const cursorChain = decodeCursorState(cursor);
+  const activeCursorToken = safePage > 1 ? cursorChain[safePage - 2] ?? null : null;
+  const decodedCursor = activeCursorToken ? decodeCursor(activeCursorToken) : null;
 
   const orderBy = [
     { field: "createdAt", direction: "DESCENDING" as const },
     { field: "__name__", direction: "DESCENDING" as const },
   ];
 
-  const decodedCursor = cursor ? decodeCursor(cursor) : null;
   const docs = await fsQuery(
     "customers",
     [],
@@ -68,7 +67,7 @@ export async function getCustomersPage({
     safePageSize + 1,
     decodedCursor
       ? {
-          values: [decodedCursor.createdAt, decodedCursor.id],
+          values: [decodedCursor.createdAt, { referenceValue: decodedCursor.docPath }],
           mode: "startAfter",
         }
       : undefined,

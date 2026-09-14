@@ -1,5 +1,6 @@
 import { fsQuery, fsGet, fsAdd, fsUpdate } from "./firestore-rest";
 import { generatePhoneVariants } from "./phone";
+import { decodeCursor as decodeCursorToken, decodeCursorState, encodeCursor as encodeCursorToken, encodeCursorState } from "./pagination";
 import type { Order, Payment } from "@/types/domain";
 
 function generateReference(): string {
@@ -85,18 +86,14 @@ export async function getOrderByFulfillmentProviderReference(reference: string):
 export const DEFAULT_ADMIN_PAGE_SIZE = 25;
 
 export function encodeCursor(doc: Pick<Order, "id" | "createdAt">): string {
-  return Buffer.from(JSON.stringify({ id: doc.id, createdAt: doc.createdAt })).toString("base64");
+  return encodeCursorToken(doc, "orders");
 }
 
-export function decodeCursor(token: string): { id: string; createdAt: string } | null {
-  try {
-    const decoded = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
-    if (!decoded || typeof decoded.id !== "string" || typeof decoded.createdAt !== "string") return null;
-    return { id: decoded.id, createdAt: decoded.createdAt };
-  } catch {
-    return null;
-  }
+export function decodeCursor(token: string): { id: string; createdAt: string; docPath: string } | null {
+  return decodeCursorToken(token, "orders");
 }
+
+export { encodeCursorState, decodeCursorState };
 
 export async function getOrders(): Promise<Order[]> {
   const docs = await fsQuery("orders", [], { field: "createdAt", direction: "DESCENDING" });
@@ -120,13 +117,15 @@ export async function getOrdersPage({
 }> {
   const safePage = Math.max(1, Number(page) || 1);
   const safePageSize = Math.max(1, Number(pageSize) || DEFAULT_ADMIN_PAGE_SIZE);
+  const cursorChain = decodeCursorState(cursor);
+  const activeCursorToken = safePage > 1 ? cursorChain[safePage - 2] ?? null : null;
+  const decodedCursor = activeCursorToken ? decodeCursor(activeCursorToken) : null;
 
   const orderBy = [
     { field: "createdAt", direction: "DESCENDING" as const },
     { field: "__name__", direction: "DESCENDING" as const },
   ];
 
-  const decodedCursor = cursor ? decodeCursor(cursor) : null;
   const docs = await fsQuery(
     "orders",
     [],
@@ -134,7 +133,7 @@ export async function getOrdersPage({
     safePageSize + 1,
     decodedCursor
       ? {
-          values: [decodedCursor.createdAt, decodedCursor.id],
+          values: [decodedCursor.createdAt, { referenceValue: decodedCursor.docPath }],
           mode: "startAfter",
         }
       : undefined,
