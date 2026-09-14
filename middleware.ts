@@ -1,39 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/", "/buy", "/about", "/privacy", "/terms", "/refund-policy", "/help", "/track"];
 const ADMIN_PATH_PREFIXES = ["/admin", "/sign-in", "/api/admin", "/api/auth"];
 const WEBHOOK_PATH_PREFIXES = ["/api/payments/webhook", "/api/webhooks/datamart", "/api/payments/verify"];
-
-function parseMaintenanceCookie(rawValue: string | null | undefined) {
-  if (!rawValue) {
-    return { enabled: true, message: "" };
-  }
-
-  try {
-    const parsed = JSON.parse(rawValue) as { enabled?: boolean; message?: string };
-    return {
-      enabled: parsed.enabled === true,
-      message: typeof parsed.message === "string" ? parsed.message : "",
-    };
-  } catch {
-    return { enabled: true, message: "" };
-  }
-}
-
-function isMaintenanceModeForcedOn(request: NextRequest) {
-  const envValue = (process.env.MAINTENANCE_MODE || "").trim().toLowerCase();
-  if (envValue === "on") {
-    return true;
-  }
-
-  if (envValue === "off") {
-    return false;
-  }
-
-  const cookieState = parseMaintenanceCookie(request.cookies.get("maintenance_state")?.value ?? null);
-  return cookieState.enabled;
-}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -57,26 +26,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!isMaintenanceModeForcedOn(request)) {
-    return NextResponse.next();
-  }
-
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json(
-      { error: "Site temporarily closed for maintenance.", details: "Public ordering is unavailable while maintenance is active." },
-      { status: 503 }
-    );
-  }
-
-  const isPublicPath = PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/track") || pathname.startsWith("/buy") || pathname.startsWith("/about") || pathname.startsWith("/help") || pathname.startsWith("/privacy") || pathname.startsWith("/terms") || pathname.startsWith("/refund-policy");
-
-  if (!isPublicPath) {
     return NextResponse.next();
   }
 
-  const url = request.nextUrl.clone();
-  url.pathname = "/maintenance";
-  return NextResponse.redirect(url);
+  return NextResponse.next();
 }
 
 export const config = {
