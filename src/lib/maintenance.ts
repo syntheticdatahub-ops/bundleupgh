@@ -61,7 +61,7 @@ export async function getMaintenanceState(forceRefresh = false): Promise<Mainten
     return state;
   } catch {
     const fallback: MaintenanceState = {
-      enabled: true,
+      enabled: false,
       message: DEFAULT_MAINTENANCE_MESSAGE,
       updatedAt: new Date().toISOString(),
       source: "default",

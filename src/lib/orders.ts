@@ -100,6 +100,74 @@ export async function getOrders(): Promise<Order[]> {
   return docs as Order[];
 }
 
+export async function getRecentOrders(limit = 10): Promise<Order[]> {
+  const docs = await fsQuery("orders", [], { field: "createdAt", direction: "DESCENDING" }, limit);
+  return docs as Order[];
+}
+
+export async function getOperationalOrders(limit = 200): Promise<Order[]> {
+  const docs = await fsQuery(
+    "orders",
+    [{ field: "paymentStatus", op: "IN", value: ["SUCCESS", "PAID", "NOT_APPLICABLE"] }],
+    { field: "createdAt", direction: "DESCENDING" },
+    limit,
+  );
+  return docs as Order[];
+}
+
+export async function getOperationalOrderMetrics(): Promise<{
+  totalOrders: number;
+  totalRevenue: number;
+  deliveredOrders: number;
+  pendingOrders: number;
+  failedOrders: number;
+  estimatedProfit: number;
+}> {
+  const { fsCount, fsAggregateSum } = await import("./firestore-rest");
+  const operationalFilter = [{ field: "paymentStatus", op: "IN", value: ["SUCCESS", "PAID", "NOT_APPLICABLE"] }];
+  const [totalOrders, deliveredOrders, pendingOrders, failedOrders, totalRevenue, estimatedProfit] = await Promise.all([
+    fsCount("orders", operationalFilter),
+    fsCount("orders", [{ field: "fulfillmentStatus", op: "IN", value: ["SUCCESS", "DELIVERED"] }]),
+    fsCount("orders", [{ field: "fulfillmentStatus", op: "IN", value: ["PROCESSING", "ON_HOLD", "PENDING"] }]),
+    fsCount("orders", [{ field: "fulfillmentStatus", op: "IN", value: ["FAILED", "REFUND_PENDING", "REFUNDED"] }]),
+    fsAggregateSum("orders", "sellingPriceSnapshot", operationalFilter),
+    fsAggregateSum("orders", "profitSnapshot", operationalFilter),
+  ]);
+
+  return {
+    totalOrders,
+    totalRevenue,
+    deliveredOrders,
+    pendingOrders,
+    failedOrders,
+    estimatedProfit,
+  };
+}
+
+export async function getNetworkBreakdownStats(networks: Array<{ id: string; name: string; color?: string }>): Promise<Array<{ network: string; color?: string; orders: number; revenue: number }>> {
+  const { fsCount, fsAggregateSum } = await import("./firestore-rest");
+  const operationalFilter = [{ field: "paymentStatus", op: "IN", value: ["SUCCESS", "PAID", "NOT_APPLICABLE"] }];
+
+  const stats = await Promise.all(
+    networks.map(async (net) => {
+      const networkFilter = [...operationalFilter, { field: "networkId", op: "EQUAL", value: net.id }];
+      const [orders, revenue] = await Promise.all([
+        fsCount("orders", networkFilter),
+        fsAggregateSum("orders", "sellingPriceSnapshot", networkFilter),
+      ]);
+
+      return {
+        network: net.name,
+        color: net.color,
+        orders,
+        revenue,
+      };
+    })
+  );
+
+  return stats.sort((a, b) => b.orders - a.orders);
+}
+
 export async function getOrdersPage({
   page = 1,
   pageSize = DEFAULT_ADMIN_PAGE_SIZE,

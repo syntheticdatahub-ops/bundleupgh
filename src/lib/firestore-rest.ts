@@ -242,6 +242,44 @@ export async function fsQuery(
     .map((r: any) => docToObject(r.document));
 }
 
+export async function fsAggregateSum(
+  collection: string,
+  fieldPath: string,
+  filters: Array<{ field: string; op: string; value: any }> = [],
+  groupOp: "AND" | "OR" = "AND",
+): Promise<number> {
+  const token = await getAccessToken();
+  const where = buildWhereClause(filters, groupOp);
+
+  const body = {
+    structuredQuery: {
+      from: [{ collectionId: collection }],
+      ...(where ? { where } : {}),
+    },
+    aggregations: [{ sum: { field: { fieldPath } } }],
+  };
+
+  const bodyStr = JSON.stringify(body);
+  const response = await httpsRequest({
+    hostname: BASE,
+    path: `/v1/projects/${projectId}/databases/(default)/documents:runAggregationQuery`,
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(bodyStr),
+    },
+  }, bodyStr);
+
+  const data = JSON.parse(response);
+  if (data.error) {
+    throw new Error(`Firestore aggregation failed: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+
+  const aggregateValue = Array.isArray(data) ? data[0]?.aggregateFields?.sum?.doubleValue ?? data[0]?.aggregateFields?.sum?.integerValue ?? 0 : 0;
+  return Number(aggregateValue ?? 0);
+}
+
 export async function fsCount(
   collection: string,
   filters: Array<{ field: string; op: string; value: any }> = [],

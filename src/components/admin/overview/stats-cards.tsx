@@ -12,31 +12,8 @@ function isOperational(order: Order): boolean {
   return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
 }
 
-export function StatsCards({ orders }: { orders: Order[] }) {
-  const operationalOrders = orders.filter(isOperational);
-  const totalOrders = operationalOrders.length;
-
-  let deliveredOrders = 0;
-  let pendingOrders = 0;
-  let failedOrders = 0;
-  let totalRevenue = 0;
-  let estimatedProfit = 0;
-
-  for (const order of operationalOrders) {
-    const fs = order.fulfillmentStatus?.toUpperCase() || "PENDING";
-
-    if (fs === "SUCCESS" || fs === "DELIVERED") {
-      deliveredOrders++;
-    } else if (fs === "PROCESSING" || fs === "ON_HOLD" || fs === "PENDING") {
-      pendingOrders++;
-    } else if (fs === "FAILED" || fs === "REFUNDED" || fs === "REFUND_PENDING") {
-      failedOrders++;
-    }
-
-    // Revenue and profit are based on all operational orders using their immutable snapshots.
-    totalRevenue += Number(order.sellingPriceSnapshot ?? 0);
-    estimatedProfit += Number(order.profitSnapshot ?? 0);
-  }
+export function StatsCards({ stats }: { stats: { totalOrders: number; totalRevenue: number; deliveredOrders: number; pendingOrders: number; failedOrders: number; estimatedProfit: number } }) {
+  const { totalOrders, totalRevenue, deliveredOrders, pendingOrders, failedOrders, estimatedProfit } = stats;
 
   const cards = [
     {

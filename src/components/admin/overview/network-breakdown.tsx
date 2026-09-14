@@ -1,27 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Order, Network } from "@/types/domain"
 
-export function NetworkBreakdown({ orders, networks }: { orders: Order[], networks: Network[] }) {
-  // Only count operational orders (payment confirmed). Also support legacy "PAID".
-  const operationalOrders = orders.filter((o) => {
-    const status = o.paymentStatus?.toUpperCase() || "";
-    return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
-  });
-
-  const stats = networks.map((net) => {
-    const netOrders = operationalOrders.filter((o) => o.networkId === net.id);
-    const revenue = netOrders.reduce((sum, o) => sum + (Number(o.sellingPriceSnapshot) || 0), 0);
-    return {
-      network: net.name,
-      color: net.color,
-      orders: netOrders.length,
-      revenue,
-    };
-  }).sort((a, b) => b.orders - a.orders);
-
+export function NetworkBreakdown({ stats }: { stats: Array<{ network: string; color?: string; orders: number; revenue: number }> }) {
   const maxOrders = Math.max(...stats.map(n => n.orders), 1);
 
-  if (operationalOrders.length === 0) {
+  if (stats.length === 0 || stats.every((stat) => stat.orders === 0)) {
     return (
       <Card className="h-full flex flex-col">
         <CardHeader>
