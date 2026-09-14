@@ -1,0 +1,20 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { StatsCards } from "@/components/admin/overview/stats-cards";
+import { RevenueChart } from "@/components/admin/overview/revenue-chart";
+import { NetworkBreakdown } from "@/components/admin/overview/network-breakdown";
+import { RecentOrdersWidget } from "@/components/admin/overview/recent-orders-widget";
+import { getNetworkBreakdownStats, getOperationalOrderMetrics, getOperationalOrders, getRecentOrders } from "@/lib/orders";
+import { getNetworks } from "@/lib/networks";
+import { AutoRefresh } from "@/components/admin/auto-refresh";
+import { MaintenanceCard } from "@/components/admin/maintenance-card";
+export const dynamic = "force-dynamic";
+export default async function AdminOverview() {
+    const [metrics, recentOrders, revenueOrders, networks] = await Promise.all([
+        getOperationalOrderMetrics(),
+        getRecentOrders(5),
+        getOperationalOrders(200),
+        getNetworks(),
+    ]);
+    const networkStats = await getNetworkBreakdownStats(networks);
+    return (_jsxs("div", { className: "flex-1 space-y-4 p-4 md:p-8 pt-6", children: [_jsx(AutoRefresh, { interval: 10000 }), _jsx("div", { className: "flex items-center justify-between space-y-2", children: _jsx("h2", { className: "text-3xl font-bold tracking-tight", children: "Overview" }) }), _jsx(MaintenanceCard, {}), _jsx(StatsCards, { stats: metrics }), _jsxs("div", { className: "grid gap-4 md:grid-cols-2 lg:grid-cols-7", children: [_jsx("div", { className: "lg:col-span-4", children: _jsx(RevenueChart, { orders: revenueOrders }) }), _jsx("div", { className: "lg:col-span-3", children: _jsx(NetworkBreakdown, { stats: networkStats }) })] }), _jsx("div", { className: "grid gap-4 md:grid-cols-1", children: _jsx(RecentOrdersWidget, { orders: recentOrders, networks: networks }) })] }));
+}

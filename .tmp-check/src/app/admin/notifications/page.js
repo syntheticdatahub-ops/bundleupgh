@@ -1,0 +1,2 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+export default function Page() { return (_jsx("div", { className: "flex flex-1 items-center justify-center h-full min-h-[500px]", children: _jsxs("div", { className: "text-center space-y-2", children: [_jsx("h1", { className: "text-2xl font-bold tracking-tight", children: "Coming Soon" }), _jsx("p", { className: "text-muted-foreground", children: "This module is under development." })] }) })); }

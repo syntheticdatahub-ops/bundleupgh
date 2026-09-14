@@ -106,13 +106,14 @@ export async function getRecentOrders(limit = 10): Promise<Order[]> {
 }
 
 export async function getOperationalOrders(limit = 200): Promise<Order[]> {
-  const docs = await fsQuery(
-    "orders",
-    [{ field: "paymentStatus", op: "IN", value: ["SUCCESS", "PAID", "NOT_APPLICABLE"] }],
-    { field: "createdAt", direction: "DESCENDING" },
-    limit,
-  );
-  return docs as Order[];
+  const { fsQuery } = await import("./firestore-rest");
+  const docs = await fsQuery("orders", [], { field: "createdAt", direction: "DESCENDING" }, limit);
+  return (docs as Order[])
+    .filter((order) => {
+      const status = (order.paymentStatus || "").toUpperCase();
+      return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 export async function getOperationalOrderMetrics(): Promise<{
@@ -123,49 +124,54 @@ export async function getOperationalOrderMetrics(): Promise<{
   failedOrders: number;
   estimatedProfit: number;
 }> {
-  const { fsCount, fsAggregateSum } = await import("./firestore-rest");
-  const operationalFilter = [{ field: "paymentStatus", op: "IN", value: ["SUCCESS", "PAID", "NOT_APPLICABLE"] }];
-  const [totalOrders, deliveredOrders, pendingOrders, failedOrders, totalRevenue, estimatedProfit] = await Promise.all([
-    fsCount("orders", operationalFilter),
-    fsCount("orders", [{ field: "fulfillmentStatus", op: "IN", value: ["SUCCESS", "DELIVERED"] }]),
-    fsCount("orders", [{ field: "fulfillmentStatus", op: "IN", value: ["PROCESSING", "ON_HOLD", "PENDING"] }]),
-    fsCount("orders", [{ field: "fulfillmentStatus", op: "IN", value: ["FAILED", "REFUND_PENDING", "REFUNDED"] }]),
-    fsAggregateSum("orders", "sellingPriceSnapshot", operationalFilter),
-    fsAggregateSum("orders", "profitSnapshot", operationalFilter),
-  ]);
+  const orders = await getOperationalOrders(200);
+
+  const deliveredOrders = orders.filter((order) => {
+    const status = (order.fulfillmentStatus || "").toUpperCase();
+    return status === "SUCCESS" || status === "DELIVERED";
+  }).length;
+
+  const pendingOrders = orders.filter((order) => {
+    const status = (order.fulfillmentStatus || "").toUpperCase();
+    return status === "PROCESSING" || status === "ON_HOLD" || status === "PENDING";
+  }).length;
+
+  const failedOrders = orders.filter((order) => {
+    const status = (order.fulfillmentStatus || "").toUpperCase();
+    return status === "FAILED" || status === "REFUND_PENDING" || status === "REFUNDED";
+  }).length;
 
   return {
-    totalOrders,
-    totalRevenue,
+    totalOrders: orders.length,
+    totalRevenue: orders.reduce((sum, order) => sum + Number(order.sellingPriceSnapshot ?? 0), 0),
     deliveredOrders,
     pendingOrders,
     failedOrders,
-    estimatedProfit,
+    estimatedProfit: orders.reduce((sum, order) => sum + Number(order.profitSnapshot ?? 0), 0),
   };
 }
 
 export async function getNetworkBreakdownStats(networks: Array<{ id: string; name: string; color?: string }>): Promise<Array<{ network: string; color?: string; orders: number; revenue: number }>> {
-  const { fsCount, fsAggregateSum } = await import("./firestore-rest");
-  const operationalFilter = [{ field: "paymentStatus", op: "IN", value: ["SUCCESS", "PAID", "NOT_APPLICABLE"] }];
+  const orders = await getOperationalOrders(200);
 
-  const stats = await Promise.all(
-    networks.map(async (net) => {
-      const networkFilter = [...operationalFilter, { field: "networkId", op: "EQUAL", value: net.id }];
-      const [orders, revenue] = await Promise.all([
-        fsCount("orders", networkFilter),
-        fsAggregateSum("orders", "sellingPriceSnapshot", networkFilter),
-      ]);
+  const grouped = new Map<string, { network: string; color?: string; orders: number; revenue: number }>();
 
-      return {
-        network: net.name,
-        color: net.color,
-        orders,
-        revenue,
-      };
-    })
-  );
+  for (const net of networks) {
+    grouped.set(net.id, { network: net.name, color: net.color, orders: 0, revenue: 0 });
+  }
 
-  return stats.sort((a, b) => b.orders - a.orders);
+  for (const order of orders) {
+    const key = order.networkId;
+    const entry = grouped.get(key);
+    if (!entry) continue;
+
+    entry.orders += 1;
+    entry.revenue += Number(order.sellingPriceSnapshot ?? 0);
+  }
+
+  return Array.from(grouped.values())
+    .filter((entry) => entry.orders > 0)
+    .sort((a, b) => b.orders - a.orders);
 }
 
 export async function getOrdersPage({
