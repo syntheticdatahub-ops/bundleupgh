@@ -13,7 +13,7 @@ export default async function MaintenancePage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-zinc-950 px-6 py-12 text-foreground">
+    <main className="relative z-0 flex min-h-screen items-center justify-center overflow-hidden bg-zinc-950 px-6 py-12 text-foreground">
       <GlobeBackground />
 
       <div className="relative z-10 w-full max-w-xl rounded-2xl border border-white/10 bg-card/80 p-8 shadow-2xl backdrop-blur-md sm:p-12">
