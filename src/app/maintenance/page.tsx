@@ -35,8 +35,8 @@ export default async function MaintenancePage() {
           <p className="text-sm text-muted-foreground">
             Need urgent help with a pending order?
           </p>
-          <a href="mailto:support@bundleup.com.gh" className="text-sm font-medium text-primary hover:underline transition-colors">
-            support@bundleup.com.gh
+          <a href="mailto:syntheticdatahub@gmail.com" className="text-sm font-medium text-primary hover:underline transition-colors">
+            syntheticdatahub@gmail.com
           </a>
         </div>
       </div>
