@@ -13,11 +13,10 @@ export default async function MaintenancePage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-background px-6 py-12 text-foreground overflow-hidden">
-      {/* Vercel Deployment Trigger - Globe Background */}
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-zinc-950 px-6 py-12 text-foreground">
       <GlobeBackground />
 
-      <div className="relative w-full max-w-xl rounded-2xl border border-border bg-card/80 p-8 sm:p-12 shadow-2xl backdrop-blur-md">
+      <div className="relative z-10 w-full max-w-xl rounded-2xl border border-white/10 bg-card/80 p-8 shadow-2xl backdrop-blur-md sm:p-12">
         <div className="mb-6 flex justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-lg text-primary-foreground">
             <Zap className="h-8 w-8" />
