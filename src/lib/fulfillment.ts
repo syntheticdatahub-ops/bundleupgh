@@ -1,17 +1,8 @@
-﻿import { fsUpdate } from "@/lib/firestore-rest";
 import { fulfillDataMartOrder } from "./datamart";
-import { getOrderById } from "./orders";
+import { Order } from "@/types/domain";
 
-export async function processFulfillment(orderId: string): Promise<void> {
-  await fsUpdate("orders", orderId, {
-    fulfillmentStatus: "PROCESSING",
-    updatedAt: new Date().toISOString(),
-  });
-
-  const order = await getOrderById(orderId);
-  if (order && order.paymentStatus === "SUCCESS") {
-    // Only fulfill if processing hasn't already completed (we just set it to PROCESSING, so it's safe to call)
-    // The datamart idempotency will prevent double billing
+export async function processFulfillment(order: Order): Promise<void> {
+  if (order.paymentStatus === "SUCCESS" || order.paymentStatus === "NOT_APPLICABLE") {
     await fulfillDataMartOrder(order);
   }
 }

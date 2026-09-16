@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { fsUpdate } from "@/lib/firestore-rest";
+import { fsUpdate, fsConditionalClaimPayment } from "@/lib/firestore-rest";
 import { getOrderByProviderReference, getPaymentByOrderId } from "@/lib/orders";
 import { processFulfillment } from "@/lib/fulfillment";
 import { getPaystackSecretKey, verifyPaystackSignature } from "@/lib/paystack";
@@ -71,11 +71,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Amount mismatch" }, { status: 400 });
       }
 
-      await fsUpdate("orders", order.id, {
+      // Atomic conditional write: only proceeds if paymentStatus is NOT already SUCCESS.
+      // Returns false if another concurrent request already claimed it — safe to ignore.
+      const claimed = await fsConditionalClaimPayment(order.id, {
         paymentStatus: "SUCCESS",
         fulfillmentStatus: "PROCESSING",
-        updatedAt: new Date().toISOString(),
       });
+      if (!claimed) {
+        return NextResponse.json({ received: true, idempotent: true });
+      }
 
       if (payment) {
         await fsUpdate("payments", payment.id, {
@@ -88,7 +92,9 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      await processFulfillment(order.id);
+      order.paymentStatus = "SUCCESS";
+      order.fulfillmentStatus = "PROCESSING";
+      await processFulfillment(order);
       return NextResponse.json({ received: true, processed: true });
     }
 

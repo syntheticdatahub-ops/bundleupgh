@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/admin/cron/auto-retry",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

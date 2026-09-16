@@ -177,6 +177,22 @@ function StatusUpdateSection({
   const isSensitive = SENSITIVE_TRANSITIONS.has(`${order.fulfillmentStatus}→${selected}`)
   const hasChanged = selected !== order.fulfillmentStatus
 
+  const handleAction = async (endpoint: string, actionName: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(endpoint, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `${actionName} failed`)
+      setToast({ type: "success", message: data.message || `Order ${actionName} successful` })
+      if (data.order) onUpdated(data.order)
+    } catch (err: any) {
+      setToast({ type: "error", message: err.message || `Unable to ${actionName}. Please try again.` })
+    } finally {
+      setSaving(false)
+      setTimeout(() => setToast(null), 3500)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setConfirmOpen(false)
@@ -199,9 +215,37 @@ function StatusUpdateSection({
     }
   }
 
+  const isTerminal = order.fulfillmentStatus === "FAILED"
+  const isSuccess = order.fulfillmentStatus === "SUCCESS"
+  const isOnHold = order.fulfillmentStatus === "ON_HOLD"
+
   return (
     <div className="border rounded-xl p-4 space-y-3 bg-muted/20">
-      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Manual Status Override</span>
+      
+      {/* Quick Actions */}
+      <div className="flex gap-2 mb-4">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          disabled={saving || isTerminal || isSuccess}
+          className="flex-1 text-xs h-8"
+          onClick={() => handleAction(`/api/admin/orders/${order.id}/sync`, "sync")}
+        >
+          {saving ? "Syncing..." : "Sync Status"}
+        </Button>
+        <Button 
+          variant={isTerminal ? "destructive" : "outline"}
+          size="sm" 
+          disabled={saving || isSuccess}
+          className="flex-1 text-xs h-8"
+          onClick={() => handleAction(`/api/admin/orders/${order.id}/retry`, "retry")}
+          title={isTerminal ? "Re-submit to DataMart (use after topping up your account)" : "Retry fulfilment"}
+        >
+          {saving ? "Submitting…" : isTerminal ? "🔄 Resubmit to DataMart" : "Retry Delivery"}
+        </Button>
+      </div>
+
+      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mt-4 block">Manual Status Override</span>
 
       <div className="flex items-center gap-2">
         <Select value={selected} onValueChange={(v) => setSelected(v as Order["fulfillmentStatus"])}>
@@ -310,6 +354,7 @@ function formatDate(iso?: string) {
 }
 
 export function OrderDetailDrawer({ order, networks, open, onClose, onOrderUpdated }: Props) {
+  const [isDeleting, setIsDeleting] = useState(false)
   const net = order ? networks.find((n) => n.id === order.networkId) : null
 
   return (
@@ -394,8 +439,47 @@ export function OrderDetailDrawer({ order, networks, open, onClose, onOrderUpdat
                 <DetailRow label="Provider Event" value={order.providerEvent} mono />
                 <DetailRow label="Provider Ref" value={order.fulfillmentProviderReference || order.providerReference} mono copyable />
                 <DetailRow label="Transaction ID" value={order.fulfillmentProviderTransactionId} mono copyable />
+                {order.autoRetryCount !== undefined && order.autoRetryCount > 0 && (
+                  <div className="flex items-start justify-between gap-4 py-2 border-b">
+                    <span className="text-xs text-muted-foreground min-w-[130px]">Auto-Retries</span>
+                    <span className="text-xs font-medium text-amber-600">{order.autoRetryCount} / 3</span>
+                  </div>
+                )}
                 <DetailRow label="Last Event" value={order.lastProviderEventAt ? formatDate(order.lastProviderEventAt) : null} />
                 <DetailRow label="Provider Error" value={order.providerError} />
+              </div>
+
+              {/* Danger Zone */}
+              <div className="pt-8 pb-4">
+                <SectionHeader icon={() => <span className="text-red-500 mr-2 text-lg">⚠️</span>} label="Danger Zone" />
+                <div className="border border-red-200 rounded-xl px-4 py-4 bg-red-50/50 dark:bg-red-500/10">
+                  <p className="text-xs text-red-600 dark:text-red-400 mb-3 font-medium">
+                    This will permanently remove the order from the database. It cannot be undone.
+                  </p>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    className="w-full text-xs"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      if (!confirm("Are you SURE you want to completely delete this order? This cannot be undone.")) return;
+                      
+                      setIsDeleting(true)
+                      try {
+                        const res = await fetch(`/api/admin/orders/${order.id}`, { method: "DELETE" })
+                        if (!res.ok) throw new Error("Delete failed")
+                        alert("Order deleted.")
+                        window.location.reload() // Force a hard reload to clear it from the table simply
+                      } catch (err: any) {
+                        alert(err.message || "Failed to delete order")
+                      } finally {
+                        setIsDeleting(false)
+                      }
+                    }}
+                  >
+                    {isDeleting ? "Deleting..." : "Delete Order"}
+                  </Button>
+                </div>
               </div>
 
             </div>

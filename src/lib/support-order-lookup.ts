@@ -17,7 +17,7 @@ export type SupportOrder = {
 export function maskPhone(phone: string): string {
   const clean = phone.replace(/\D/g, "");
   if (clean.length <= 6) return "****";
-  return clean.slice(0, 3) + "Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢" + clean.slice(-2);
+  return clean.slice(0, 3) + "****" + clean.slice(-2);
 }
 
 export function toSupportOrder(doc: any): SupportOrder {

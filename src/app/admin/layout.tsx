@@ -7,6 +7,8 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { verifySessionJwt } from "@/lib/auth-verify"
+import { SessionWarning } from "@/components/admin/session-warning"
+import { NotificationBell } from "@/components/admin/notification-bell"
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies()
@@ -32,6 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <DynamicBreadcrumb />
           </div>
           <div className="ml-auto flex items-center gap-2 pr-4">
+            <NotificationBell />
             <kbd className="pointer-events-none hidden h-6 select-none items-center gap-1 rounded border bg-muted px-2 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
               <span className="text-xs">⌘</span>K
             </kbd>
@@ -39,6 +42,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </header>
         <CommandPalette />
+        <SessionWarning />
         <main className="flex flex-1 flex-col">{children}</main>
       </SidebarInset>
     </SidebarProvider>

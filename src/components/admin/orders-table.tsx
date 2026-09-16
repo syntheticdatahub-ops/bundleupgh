@@ -74,32 +74,55 @@ export function AdminOrdersTable({
   hasNextPage: boolean
   nextCursor?: string
 }) {
-  const [query, setQuery] = useState("")
-  
-  // Filters
-  const [paymentFilter, setPaymentFilter] = useState("OPERATIONAL") // OPERATIONAL, ALL, PENDING, FAILED, REFUNDED
-  const [networkFilter, setNetworkFilter] = useState("ALL")
-  const [fulfillmentFilter, setFulfillmentFilter] = useState("ALL")
-  const [dateFilter, setDateFilter] = useState("ALL")
-  const [dateFrom, setDateFrom] = useState("")
-  const [dateTo, setDateTo] = useState("")
-
-  const [orders, setOrders] = useState<Order[]>(initialOrders)
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [drawerOpen, setDrawerOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
+  const [query, setQuery] = useState("")
+  
+  // Filters
+  const [paymentFilter, setPaymentFilter] = useState(searchParams.get("payment") || "OPERATIONAL")
+  const [networkFilter, setNetworkFilter] = useState(searchParams.get("network") || "ALL")
+  const [fulfillmentFilter, setFulfillmentFilter] = useState(searchParams.get("fulfillment") || "ALL")
+  const [dateFilter, setDateFilter] = useState("ALL")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+
+  const applyFilters = (pf: string, ff: string, nf: string) => {
+    setPaymentFilter(pf)
+    setFulfillmentFilter(ff)
+    setNetworkFilter(nf)
+    
+    const params = new URLSearchParams(searchParams.toString())
+    if (pf !== "OPERATIONAL") params.set("payment", pf)
+    else params.delete("payment")
+    
+    if (ff !== "ALL") params.set("fulfillment", ff)
+    else params.delete("fulfillment")
+    
+    if (nf !== "ALL") params.set("network", nf)
+    else params.delete("network")
+    
+    // Reset pagination when filters change
+    params.delete("page")
+    params.delete("cursor")
+    
+    const queryString = params.toString()
+    router.push(queryString ? `${pathname}?${queryString}` : pathname)
+  }
+
+  const [orders, setOrders] = useState<Order[]>(initialOrders)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
+  const [isBulkLoading, setIsBulkLoading] = useState(false)
+  const [globalRef, setGlobalRef] = useState("")
+
   useEffect(() => {
     setOrders(initialOrders)
+    setSelectedOrderIds(new Set())
   }, [initialOrders])
-
-  // Auto-refresh loop removed (Phase 1 of the Firestore read audit): this
-  // previously called router.refresh() every 10s, which re-rendered the entire
-  // admin server component and re-read the whole /orders + /networks
-  // collections each time. Data now refreshes via explicit actions (e.g.
-  // handleOrderUpdated after a status mutation) or a full page navigation.
 
   const handleRowClick = (order: Order) => {
     setSelectedOrder(order)
@@ -116,6 +139,58 @@ export function AdminOrdersTable({
     setSelectedOrder(updated)
     router.refresh()
   }, [router])
+
+  const toggleSelection = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const newSet = new Set(selectedOrderIds)
+    if (newSet.has(id)) newSet.delete(id)
+    else newSet.add(id)
+    setSelectedOrderIds(newSet)
+  }
+
+  const toggleAll = () => {
+    if (selectedOrderIds.size === filtered.length) {
+      setSelectedOrderIds(new Set())
+    } else {
+      setSelectedOrderIds(new Set(filtered.map(o => o.id)))
+    }
+  }
+
+  const handleBulkAction = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const action = e.target.value
+    if (!action || selectedOrderIds.size === 0) return
+    e.target.value = ""
+    
+    setIsBulkLoading(true)
+    let processed = 0
+    let errors = 0
+    
+    for (const id of Array.from(selectedOrderIds)) {
+      try {
+        let endpoint = ""
+        if (action === "SYNC") endpoint = `/api/admin/orders/${id}/sync`
+        else if (action === "RETRY") endpoint = `/api/admin/orders/${id}/retry`
+        
+        if (endpoint) {
+          const res = await fetch(endpoint, { method: "POST" })
+          if (!res.ok) throw new Error("Request failed")
+          
+          const data = await res.json()
+          if (data.order) {
+            setOrders(prev => prev.map(o => o.id === id ? data.order : o))
+          }
+        }
+        processed++
+      } catch (err) {
+        errors++
+      }
+    }
+    
+    setIsBulkLoading(false)
+    setSelectedOrderIds(new Set())
+    alert(`Bulk action complete. Processed: ${processed}. Errors: ${errors}.`)
+    router.refresh()
+  }
 
   const changePage = useCallback((nextPage: number) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -249,9 +324,59 @@ export function AdminOrdersTable({
                 />
               </div>
               
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FilterIcon className="size-4" />
-                <span className="font-medium">Filters</span>
+              <div className="flex items-center gap-4">
+                {selectedOrderIds.size > 0 && (
+                  <select
+                    className="h-9 rounded-md border border-input bg-primary text-primary-foreground px-3 py-1 text-sm shadow-sm cursor-pointer"
+                    value=""
+                    onChange={handleBulkAction}
+                    disabled={isBulkLoading}
+                  >
+                    <option value="" disabled>{isBulkLoading ? "Processing..." : `Bulk Actions (${selectedOrderIds.size})`}</option>
+                    <option value="SYNC">Sync with Provider</option>
+                    <option value="RETRY">Retry ON_HOLD</option>
+                  </select>
+                )}
+
+                {/* Global Search by Reference or Phone */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!globalRef) return;
+                    router.push(`${pathname}?search=${encodeURIComponent(globalRef)}`);
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Input
+                    placeholder="Search ANY Ref or Phone"
+                    className="h-9 w-56 font-mono text-sm uppercase"
+                    value={globalRef}
+                    onChange={(e) => setGlobalRef(e.target.value.replace(/[^A-Za-z0-9-+]/g, "").toUpperCase())}
+                  />
+                  <button type="submit" className="h-9 px-3 rounded-md border bg-muted/50 text-sm hover:bg-muted font-medium text-muted-foreground">
+                    Find
+                  </button>
+                  {(searchParams.get("reference") || searchParams.get("search")) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGlobalRef("");
+                        const p = new URLSearchParams(searchParams.toString());
+                        p.delete("reference");
+                        p.delete("search");
+                        router.push(p.toString() ? `${pathname}?${p.toString()}` : pathname);
+                      }}
+                      className="text-xs text-muted-foreground hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </form>
+                
+                <div className="flex items-center gap-2 text-sm text-muted-foreground ml-2">
+                  <FilterIcon className="size-4" />
+                  <span className="font-medium">Filters</span>
+                </div>
               </div>
             </div>
 
@@ -259,7 +384,7 @@ export function AdminOrdersTable({
               <select 
                 className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                 value={paymentFilter} 
-                onChange={(e) => setPaymentFilter(e.target.value)}
+                onChange={(e) => applyFilters(e.target.value, fulfillmentFilter, networkFilter)}
               >
                 <option value="OPERATIONAL">Payment: Paid (Operational)</option>
                 <option value="ALL">Payment: All Attempts</option>
@@ -271,7 +396,7 @@ export function AdminOrdersTable({
               <select 
                 className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                 value={networkFilter} 
-                onChange={(e) => setNetworkFilter(e.target.value)}
+                onChange={(e) => applyFilters(paymentFilter, fulfillmentFilter, e.target.value)}
               >
                 <option value="ALL">Network: All</option>
                 <option value="MTN">MTN</option>
@@ -282,9 +407,10 @@ export function AdminOrdersTable({
               <select 
                 className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
                 value={fulfillmentFilter} 
-                onChange={(e) => setFulfillmentFilter(e.target.value)}
+                onChange={(e) => applyFilters(paymentFilter, e.target.value, networkFilter)}
               >
                 <option value="ALL">Fulfillment: All</option>
+                <option value="PENDING">Pending</option>
                 <option value="PROCESSING">Processing</option>
                 <option value="ON_HOLD">On Hold</option>
                 <option value="SUCCESS">Delivered</option>
@@ -325,10 +451,62 @@ export function AdminOrdersTable({
             </div>
           </div>
 
+          {/* ── Quick-filter chips ─────────────────────────────────── */}
+          <div className="flex flex-wrap gap-2 px-4 pb-3 pt-1 border-b">
+            {[
+              { label: "⚠️ Delivery Failed", ff: "FAILED", pf: "OPERATIONAL", color: "bg-red-100 text-red-700 border-red-200 hover:bg-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30" },
+              { label: "⏸ On Hold", ff: "ON_HOLD", pf: "OPERATIONAL", color: "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/30" },
+              { label: "⏳ Processing", ff: "PROCESSING", pf: "OPERATIONAL", color: "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30" },
+              { label: "✅ Delivered", ff: "SUCCESS", pf: "OPERATIONAL", color: "bg-green-100 text-green-700 border-green-200 hover:bg-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30" },
+            ].map(({ label, ff, pf, color }) => {
+              const isActive = fulfillmentFilter === ff && paymentFilter === pf
+              return (
+                <button
+                  key={ff}
+                  type="button"
+                  onClick={() => {
+                    if (isActive) {
+                      applyFilters("OPERATIONAL", "ALL", networkFilter)
+                    } else {
+                      applyFilters(pf, ff, networkFilter)
+                    }
+                  }}
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors cursor-pointer",
+                    color,
+                    isActive && "ring-2 ring-offset-1 ring-current"
+                  )}
+                >
+                  {label}
+                  {isActive && (
+                    <span className="ml-1.5 opacity-70">✕</span>
+                  )}
+                </button>
+              )
+            })}
+            {(fulfillmentFilter !== "ALL" || paymentFilter !== "OPERATIONAL") && (
+              <button
+                type="button"
+                onClick={() => applyFilters("OPERATIONAL", "ALL", networkFilter)}
+                className="text-xs text-muted-foreground hover:underline ml-1"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30 text-muted-foreground text-xs uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left font-medium w-10">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-gray-300" 
+                      checked={filtered.length > 0 && selectedOrderIds.size === filtered.length}
+                      onChange={toggleAll}
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-medium">Reference</th>
                   <th className="px-4 py-3 text-left font-medium">Phone</th>
                   <th className="px-4 py-3 text-left font-medium">Network</th>
@@ -350,9 +528,19 @@ export function AdminOrdersTable({
                       className={cn(
                         "border-b last:border-0 hover:bg-primary/5 transition-colors cursor-pointer group",
                         i % 2 === 0 ? "" : "bg-muted/10",
-                        (order.paymentStatus || "").toUpperCase() === "PENDING" ? "opacity-50" : ""
+                        (order.paymentStatus || "").toUpperCase() === "PENDING" ? "opacity-50" : "",
+                        selectedOrderIds.has(order.id) ? "bg-primary/10" : ""
                       )}
                     >
+                      <td className="px-4 py-3">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-gray-300"
+                          checked={selectedOrderIds.has(order.id)}
+                          onChange={() => {}} // Handle on parent div/td
+                          onClick={(e) => toggleSelection(order.id, e)}
+                        />
+                      </td>
                       <td className="px-4 py-3 font-mono font-medium">
                         <div className="flex items-center gap-2">
                           {order.publicReference}

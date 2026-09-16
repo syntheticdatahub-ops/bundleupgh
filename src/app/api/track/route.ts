@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { findOrdersByRecipientPhone } from "@/lib/orders";
+import { findOrdersByRecipientPhone, getOrderByPublicReference } from "@/lib/orders";
 import { normalizePhone } from "@/lib/phone";
 
 export const runtime = "nodejs";
@@ -39,14 +39,32 @@ function toPublicOrder(doc: any): PublicOrder {
   };
 }
 
+function isOperational(order: any): boolean {
+  const status = (order.paymentStatus ?? "").toUpperCase();
+  return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const rawPhone = (url.searchParams.get("phone") ?? "").trim();
+    const rawReference = (url.searchParams.get("reference") ?? "").trim().toUpperCase();
 
+    // ── Reference-based lookup ────────────────────────────────────────────────
+    if (rawReference) {
+      const order = await getOrderByPublicReference(rawReference);
+      if (!order || !isOperational(order)) {
+        // Return an empty result rather than a 404 so the UI can show
+        // "no orders found" instead of an error when the reference is wrong.
+        return NextResponse.json({ orders: [], count: 0 });
+      }
+      return NextResponse.json({ orders: [toPublicOrder(order)], count: 1 });
+    }
+
+    // ── Phone-based lookup ────────────────────────────────────────────────────
     if (!rawPhone || rawPhone.length > 20) {
       return NextResponse.json(
-        { error: "A valid phone number is required." },
+        { error: "A valid phone number or order reference is required." },
         { status: 400 }
       );
     }
@@ -64,10 +82,7 @@ export async function GET(req: Request) {
     // Only surface operational (paid) orders to customers.
     // Unpaid/abandoned checkout attempts (paymentStatus = PENDING or FAILED)
     // must never appear in the customer-facing tracking view.
-    const operationalOrders = allOrders.filter((o) => {
-      const status = o.paymentStatus?.toUpperCase() || "";
-      return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
-    });
+    const operationalOrders = allOrders.filter(isOperational);
 
     // Sort newest first
     operationalOrders.sort((a, b) => {

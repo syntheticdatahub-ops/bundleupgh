@@ -1,6 +1,8 @@
 "use client"
 
-import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { signOut } from "firebase/auth"
+import { auth } from "@/lib/firebase/client"
 import {
   Avatar,
   AvatarFallback,
@@ -33,6 +35,18 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      if (auth) {
+        await signOut(auth)
+      }
+    } finally {
+      await fetch("/api/auth/session", { method: "DELETE" })
+      router.push("/sign-in")
+    }
+  }
 
   return (
     <SidebarMenu>
@@ -74,7 +88,7 @@ export function NavUser({
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link href="/sign-in" />}>
+            <DropdownMenuItem onClick={handleLogout}>
               <LogOutIcon />
               Log out
             </DropdownMenuItem>

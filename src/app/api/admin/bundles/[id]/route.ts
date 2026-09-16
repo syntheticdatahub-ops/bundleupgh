@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { verifySessionJwt } from "@/lib/auth-verify";
 import { fsGet, fsUpdate } from "@/lib/firestore-rest";
 import { invalidateBundlesCache } from "@/lib/bundles";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 export async function PATCH(
   req: Request,
@@ -51,6 +52,18 @@ export async function PATCH(
 
     await fsUpdate("bundles", bundleId, nextPayload);
     invalidateBundlesCache();
+
+    const posthog = getPostHogClient();
+    posthog?.capture({
+      distinctId: user.uid,
+      event: "admin_bundle_updated",
+      properties: {
+        bundle_id: bundleId,
+        selling_price: sellingPrice,
+        active: typeof activeValue === "boolean" ? activeValue : undefined,
+      },
+    });
+    await posthog?.flush();
 
     return NextResponse.json({
       success: true,

@@ -64,7 +64,7 @@ async function dataMartRequest<T>(endpoint: string, method: "GET" | "POST", body
         ...additionalHeaders,
       },
       family: 4, // Force IPv4 for Windows SSL issue
-      rejectUnauthorized: false, // Bypass SSL cert issue locally
+      rejectUnauthorized: process.env.NODE_ENV === "production", // Bypass SSL cert issue locally
     };
 
     const req = https.request(options, (res) => {
@@ -113,7 +113,7 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
     };
 
     const response = await dataMartRequest<any>("/api/developer/purchase", "POST", payload, {
-      "X-Idempotency-Key": order.id,
+      "X-Idempotency-Key": `${order.id}-${order.autoRetryCount || 0}`,
     });
 
     if (response.status === "success" && response.data) {
@@ -136,6 +136,11 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
         updatedAt: new Date().toISOString(),
       });
       console.log(`DataMart fulfillment success for ${order.id}. Status: ${newFulfillmentStatus}`);
+      
+      if (newFulfillmentStatus === "SUCCESS" && order.customerId) {
+        const { recordCustomerOrderSuccess } = await import("./customer-stats");
+        await recordCustomerOrderSuccess(order.customerId, order.sellingPriceSnapshot);
+      }
     } else {
       console.error(`DataMart fulfillment error for ${order.id}:`, response);
       await fsUpdate("orders", order.id, {
@@ -147,7 +152,7 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
   } catch (error: any) {
     console.error(`DataMart request failed for ${order.id}:`, error);
     await fsUpdate("orders", order.id, {
-      fulfillmentStatus: "FAILED",
+      fulfillmentStatus: "ON_HOLD",
       providerError: error.message || "Network or timeout error.",
       updatedAt: new Date().toISOString(),
     });
@@ -211,6 +216,12 @@ export async function syncDataMartOrderStatus(order: Order): Promise<Order["fulf
       });
 
       console.log(`[syncDataMartOrderStatus] ${order.id}: ${order.fulfillmentStatus} → ${newFulfillmentStatus} (DataMart: ${orderStatus})`);
+      
+      if (newFulfillmentStatus === "SUCCESS" && order.customerId) {
+        const { recordCustomerOrderSuccess } = await import("./customer-stats");
+        await recordCustomerOrderSuccess(order.customerId, order.sellingPriceSnapshot);
+      }
+
       return newFulfillmentStatus;
     } else {
       console.warn(`[syncDataMartOrderStatus] Unexpected response for ${order.id}:`, JSON.stringify(response).slice(0, 200));

@@ -40,6 +40,8 @@ export interface Customer {
   id: string;
   phone: string;
   email?: string;
+  totalOrders?: number;
+  totalSpent?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,6 +78,7 @@ export interface Order {
   providerMessage?: string;
   providerUpdatedAt?: string;
   lastProviderEventAt?: string;
+  autoRetryCount?: number;
   
   source?: "WEB" | "MANUAL";
   adminUid?: string;

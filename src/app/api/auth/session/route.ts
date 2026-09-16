@@ -42,3 +42,24 @@ export async function DELETE() {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function GET() {
+  try {
+    const cookieStore = await cookies();
+    const session = cookieStore.get("session");
+    if (!session?.value) {
+      return NextResponse.json({ active: false });
+    }
+    const user = await verifySessionJwt(session.value);
+    if (!user) {
+      return NextResponse.json({ active: false });
+    }
+    // Parse JWT roughly to get expiry
+    const payload = JSON.parse(Buffer.from(session.value.split(".")[1], "base64").toString());
+    const exp = payload.exp;
+    const now = Math.floor(Date.now() / 1000);
+    return NextResponse.json({ active: true, expiresIn: exp - now });
+  } catch {
+    return NextResponse.json({ active: false });
+  }
+}

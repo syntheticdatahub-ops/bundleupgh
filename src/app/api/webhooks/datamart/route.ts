@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyDataMartWebhookSignature } from "@/lib/datamart";
-import { fsQuery, fsAdd, fsUpdate } from "@/lib/firestore-rest";
+import { fsQuery, fsAdd, fsUpdate, fsGet, fsSet } from "@/lib/firestore-rest";
 import { getOrderByFulfillmentProviderReference } from "@/lib/orders";
 import { Order, WebhookEvent } from "@/types/domain";
 
@@ -33,10 +33,9 @@ export async function POST(req: Request) {
     // Let's use reference + event + timestamp
     const eventId = `datamart-${orderReference}-${event}-${timestamp}`;
     
-    const existingEvents = await fsQuery("webhook_events", [
-      { field: "id", op: "EQUAL", value: eventId }
-    ]);
-    if (existingEvents.length > 0) {
+    // Using deterministic document ID for safe idempotency
+    const existingEvent = await fsGet("webhook_events", eventId);
+    if (existingEvent) {
       return NextResponse.json({ success: true, message: "Already processed" });
     }
 
@@ -45,8 +44,7 @@ export async function POST(req: Request) {
     if (!order) {
       // It's possible the order creation hasn't committed yet or wasn't tracked properly.
       // Store the webhook event anyway and return success so DataMart doesn't retry infinitely.
-      await fsAdd("webhook_events", {
-        id: eventId,
+      await fsSet("webhook_events", eventId, {
         provider: "DATAMART",
         eventType: event,
         providerReference: orderReference,
@@ -104,9 +102,13 @@ export async function POST(req: Request) {
 
     await fsUpdate("orders", order.id, updateData);
 
+    if (order.fulfillmentStatus !== "SUCCESS" && newFulfillmentStatus === "SUCCESS" && order.customerId) {
+      const { recordCustomerOrderSuccess } = await import("@/lib/customer-stats");
+      await recordCustomerOrderSuccess(order.customerId, order.sellingPriceSnapshot);
+    }
+
     // Record webhook success
-    await fsAdd("webhook_events", {
-      id: eventId,
+    await fsSet("webhook_events", eventId, {
       provider: "DATAMART",
       eventType: event,
       providerReference: orderReference,

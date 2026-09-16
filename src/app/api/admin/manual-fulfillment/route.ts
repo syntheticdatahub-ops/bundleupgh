@@ -7,6 +7,7 @@ import { isValidPhone, normalizePhone } from "@/lib/phone";
 import { createOrUpdateCustomer } from "@/lib/customers";
 import { cookies } from "next/headers";
 import { verifySessionJwt } from "@/lib/auth-verify";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 export async function POST(req: Request) {
   try {
@@ -81,6 +82,17 @@ export async function POST(req: Request) {
 
     // 6. Fetch the updated order to get the latest fulfillment status
     const updatedOrder = await getOrderById(order.id);
+    const posthog = getPostHogClient();
+    posthog?.capture({
+      distinctId: adminUser.uid,
+      event: "manual_fulfillment_submitted",
+      properties: {
+        bundle_id: bundleId,
+        network_id: networkId,
+        fulfillment_status: (updatedOrder || order).fulfillmentStatus,
+      },
+    });
+    await posthog?.flush();
 
     return NextResponse.json({
       success: true,

@@ -3,6 +3,7 @@ import { getOrderById } from "@/lib/orders";
 import { fsUpdate, fsAdd } from "@/lib/firestore-rest";
 import { cookies } from "next/headers";
 import { verifySessionJwt } from "@/lib/auth-verify";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 export async function POST(
   req: Request,
@@ -48,6 +49,15 @@ export async function POST(
       return NextResponse.json({ success: true, order }); // No change
     }
 
+    // Terminal status guards
+    if (previousStatus === "SUCCESS" && status !== "REFUNDED") {
+      return NextResponse.json({ error: "Cannot change a SUCCESS order to a non-REFUNDED status" }, { status: 400 });
+    }
+    
+    if (previousStatus === "FAILED") {
+      return NextResponse.json({ error: "Cannot change a FAILED order" }, { status: 400 });
+    }
+
     const now = new Date().toISOString();
 
     // 1. Update the order
@@ -55,6 +65,11 @@ export async function POST(
       fulfillmentStatus: status,
       updatedAt: now,
     });
+
+    if (previousStatus !== "SUCCESS" && status === "SUCCESS" && order.customerId) {
+      const { recordCustomerOrderSuccess } = await import("@/lib/customer-stats");
+      await recordCustomerOrderSuccess(order.customerId, order.sellingPriceSnapshot);
+    }
 
     // 2. Create audit record
     await fsAdd("order_status_history", {
@@ -69,6 +84,16 @@ export async function POST(
     });
 
     const updatedOrder = await getOrderById(orderId);
+    const posthog = getPostHogClient();
+    posthog?.capture({
+      distinctId: adminUser.uid,
+      event: "admin_order_status_updated",
+      properties: {
+        previous_status: previousStatus,
+        fulfillment_status: status,
+      },
+    });
+    await posthog?.flush();
 
     return NextResponse.json({
       success: true,

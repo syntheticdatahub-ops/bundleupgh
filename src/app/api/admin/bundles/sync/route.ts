@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { syncDataMartCatalog } from "@/lib/datamart-catalog";
 import { cookies } from "next/headers";
 import { verifySessionJwt } from "@/lib/auth-verify";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 export async function POST() {
   try {
@@ -18,6 +19,18 @@ export async function POST() {
     }
 
     const results = await syncDataMartCatalog();
+    const posthog = getPostHogClient();
+    posthog?.capture({
+      distinctId: user.uid,
+      event: "datamart_catalog_synced",
+      properties: {
+        created: results.created,
+        updated: results.updated,
+        deactivated: results.deactivated,
+        failed: results.failed,
+      },
+    });
+    await posthog?.flush();
     // Never return raw provider credentials or internal DataMart info
     return NextResponse.json(results);
   } catch (error: any) {

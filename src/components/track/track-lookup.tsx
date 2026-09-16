@@ -79,7 +79,7 @@ function FulfillmentStatusBadge({ status }: { status: string }) {
       {s === "SUCCESS" || s === "DELIVERED" ? "Delivered" :
        s === "FAILED"    ? "Delivery failed" :
        s === "PROCESSING"? "Processing" :
-       s === "ON_HOLD"   ? "Verification in progress" :
+       s === "ON_HOLD"   ? "On hold — verifying number" :
        s === "REFUNDED"  ? "Refunded" : "Pending"}
     </Badge>
   )
@@ -87,21 +87,37 @@ function FulfillmentStatusBadge({ status }: { status: string }) {
 
 export function TrackLookup() {
   const [phone, setPhone] = useState("")
+  const [reference, setReference] = useState("")
+  const [searchMode, setSearchMode] = useState<"phone" | "reference">("phone")
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState<PublicOrder[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<PublicOrder | null>(null)
   const [searchedPhone, setSearchedPhone] = useState("")
+  const [searchedReference, setSearchedReference] = useState("")
+  const listPollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Allow +, digits, spaces and dashes
     setPhone(e.target.value.replace(/[^\d+\s-]/g, ""))
   }
 
+  const handleReferenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setReference(e.target.value.replace(/[^A-Za-z0-9-]/g, "").toUpperCase())
+  }
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    const cleaned = phone.replace(/\D/g, "")
-    if (cleaned.length < 9) return
+
+    let fetchUrl = ""
+    if (searchMode === "reference") {
+      if (!reference || reference.length < 3) return
+      fetchUrl = `/api/track?reference=${encodeURIComponent(reference)}`
+    } else {
+      const cleaned = phone.replace(/\D/g, "")
+      if (cleaned.length < 9) return
+      fetchUrl = `/api/track?phone=${encodeURIComponent(phone)}`
+    }
 
     setIsLoading(true)
     setError(null)
@@ -109,7 +125,7 @@ export function TrackLookup() {
     setSelectedOrder(null)
 
     try {
-      const res = await fetch(`/api/track?phone=${encodeURIComponent(phone)}`)
+      const res = await fetch(fetchUrl)
       const data = await res.json()
 
       if (!res.ok) {
@@ -117,7 +133,8 @@ export function TrackLookup() {
         return
       }
 
-      setSearchedPhone(phone)
+      setSearchedPhone(searchMode === "phone" ? phone : "")
+      setSearchedReference(searchMode === "reference" ? reference : "")
       setResults(data.orders ?? [])
     } catch {
       setError("Unable to retrieve orders right now. Please try again.")
@@ -126,11 +143,51 @@ export function TrackLookup() {
     }
   }
 
+  // Passive list polling: silently re-fetches the order list every 30 s while
+  // the results view is open, so statuses in the list update without the
+  // customer having to click into each order individually.
+  useEffect(() => {
+    if (results === null) {
+      if (listPollRef.current) clearInterval(listPollRef.current)
+      return
+    }
+
+    const silentRefresh = async () => {
+      try {
+        const url = searchedReference
+          ? `/api/track?reference=${encodeURIComponent(searchedReference)}`
+          : `/api/track?phone=${encodeURIComponent(searchedPhone)}`
+        const res = await fetch(url)
+        if (!res.ok) return
+        const data = await res.json()
+        const freshOrders: PublicOrder[] = data.orders ?? []
+        setResults(freshOrders)
+        // If the selected order's status changed, update the panel too
+        if (selectedOrder) {
+          const fresh = freshOrders.find((o) => o.orderReference === selectedOrder.orderReference)
+          if (fresh && fresh.fulfillmentStatus !== selectedOrder.fulfillmentStatus) {
+            setSelectedOrder(fresh)
+          }
+        }
+      } catch {
+        // Silent — don't surface a background refresh error
+      }
+    }
+
+    listPollRef.current = setInterval(silentRefresh, 30000)
+    return () => {
+      if (listPollRef.current) clearInterval(listPollRef.current)
+    }
+  }, [results, searchedPhone, searchedReference, selectedOrder])
+
   // Called by LiveDeliveryTracker when DataMart status has changed in Firestore.
   // Silently re-fetches orders and updates selectedOrder so the panel refreshes.
   const refreshOrders = async (updatedRef: string) => {
     try {
-      const res = await fetch(`/api/track?phone=${encodeURIComponent(searchedPhone)}`)
+      const url = searchedReference
+        ? `/api/track?reference=${encodeURIComponent(searchedReference)}`
+        : `/api/track?phone=${encodeURIComponent(searchedPhone)}`
+      const res = await fetch(url)
       if (!res.ok) return
       const data = await res.json()
       const freshOrders: PublicOrder[] = data.orders ?? []
@@ -147,8 +204,11 @@ export function TrackLookup() {
     setResults(null)
     setError(null)
     setPhone("")
+    setReference("")
     setSelectedOrder(null)
     setSearchedPhone("")
+    setSearchedReference("")
+    if (listPollRef.current) clearInterval(listPollRef.current)
   }
 
   return (
@@ -172,17 +232,61 @@ export function TrackLookup() {
             <Card className="border-border/50 shadow-xl bg-card/50 backdrop-blur-sm">
               <CardContent className="p-6">
                 <form onSubmit={handleSearch} className="flex flex-col gap-4">
-                  <div className="relative">
-                    <PhoneIcon className="absolute left-3.5 top-3.5 size-5 text-muted-foreground" />
-                    <Input
-                      type="tel"
-                      placeholder="e.g. 0241234567 or +233241234567"
-                      className="pl-11 h-12 text-lg"
-                      value={phone}
-                      onChange={handlePhoneChange}
-                      disabled={isLoading}
-                    />
+
+                  {/* Mode toggle */}
+                  <div className="flex rounded-lg border overflow-hidden text-sm">
+                    <button
+                      type="button"
+                      onClick={() => { setSearchMode("phone"); setError(null) }}
+                      className={cn(
+                        "flex-1 py-2 font-medium transition-colors",
+                        searchMode === "phone"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted/40 text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      By Phone
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSearchMode("reference"); setError(null) }}
+                      className={cn(
+                        "flex-1 py-2 font-medium transition-colors",
+                        searchMode === "reference"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted/40 text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      By Order Ref
+                    </button>
                   </div>
+
+                  {searchMode === "phone" ? (
+                    <div className="relative">
+                      <PhoneIcon className="absolute left-3.5 top-3.5 size-5 text-muted-foreground" />
+                      <Input
+                        type="tel"
+                        placeholder="e.g. 0241234567 or +233241234567"
+                        className="pl-11 h-12 text-lg"
+                        value={phone}
+                        onChange={handlePhoneChange}
+                        disabled={isLoading}
+                      />
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <SearchIcon className="absolute left-3.5 top-3.5 size-5 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="e.g. BU-ABC123"
+                        className="pl-11 h-12 text-lg font-mono uppercase"
+                        value={reference}
+                        onChange={handleReferenceChange}
+                        disabled={isLoading}
+                        maxLength={12}
+                      />
+                    </div>
+                  )}
 
                   {error && (
                     <motion.p
@@ -199,7 +303,10 @@ export function TrackLookup() {
                     type="submit"
                     size="lg"
                     className="h-12 text-base"
-                    disabled={phone.replace(/\D/g, "").length < 9 || isLoading}
+                    disabled={
+                      isLoading ||
+                      (searchMode === "phone" ? phone.replace(/\D/g, "").length < 9 : reference.length < 3)
+                    }
                   >
                     {isLoading ? (
                       <>
@@ -364,10 +471,20 @@ export function TrackLookup() {
                     <h3 className="text-2xl font-bold capitalize">
                       {(selectedOrder.fulfillmentStatus === "SUCCESS" || selectedOrder.fulfillmentStatus === "DELIVERED") ? "Delivered" :
                        selectedOrder.fulfillmentStatus === "PROCESSING" ? "Processing" :
-                       selectedOrder.fulfillmentStatus === "ON_HOLD" ? "Verification in progress" :
+                       selectedOrder.fulfillmentStatus === "ON_HOLD" ? "On hold" :
                        selectedOrder.fulfillmentStatus === "FAILED" ? "Delivery failed" : "Pending"}
                     </h3>
-                    <p className="text-muted-foreground text-sm">{formatDate(selectedOrder.createdAt)}</p>
+                    {selectedOrder.fulfillmentStatus === "ON_HOLD" && (
+                      <p className="text-sm text-purple-700 dark:text-purple-400 mt-1 leading-snug">
+                        Your number is being verified by the network. This usually takes a few days depending on the providers network. <strong>You do not need to reorder or pay again and NOTE: This is a one time procedure.</strong>
+                      </p>
+                    )}
+                    {selectedOrder.fulfillmentStatus === "PROCESSING" && (
+                      <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                        Your bundle is being sent. This usually completes within a few minutes or hurs.
+                      </p>
+                    )}
+                    <p className="text-muted-foreground text-sm mt-1">{formatDate(selectedOrder.createdAt)}</p>
                   </div>
                 </div>
 

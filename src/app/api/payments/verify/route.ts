@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fsUpdate } from "@/lib/firestore-rest";
+import { fsUpdate, fsConditionalClaimPayment } from "@/lib/firestore-rest";
 import { extractPublicReferenceFromPaystackReference, getOrderByProviderReference, getOrderByPublicReference, getPaymentByOrderId } from "@/lib/orders";
 import { processFulfillment } from "@/lib/fulfillment";
 import { normalizePaystackAmount, verifyPaystackTransaction } from "@/lib/paystack";
@@ -114,12 +114,28 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Currency mismatch" }, { status: 400 });
     }
 
-    await fsUpdate("orders", order.id, {
+    // Atomic conditional write — prevents double-fulfillment if webhook and
+    // verify callback arrive concurrently for the same payment reference.
+    const claimed = await fsConditionalClaimPayment(order.id, {
       paymentStatus: "SUCCESS",
       fulfillmentStatus: "PROCESSING",
       providerReference: reference,
-      updatedAt: new Date().toISOString(),
     });
+    if (!claimed) {
+      // Already processed by the webhook — return success to the customer.
+      return NextResponse.json({
+        success: true,
+        status: "already_paid",
+        orderId: order.publicReference,
+        reference,
+        orderDetails: {
+          bundle: order.bundleNameSnapshot,
+          price: order.sellingPriceSnapshot,
+          phone: order.recipientPhone,
+          network: order.networkId,
+        },
+      });
+    }
 
     const payment = await getPaymentByOrderId(order.id);
     if (payment) {
@@ -133,7 +149,9 @@ export async function GET(req: Request) {
       });
     }
 
-    await processFulfillment(order.id);
+    order.paymentStatus = "SUCCESS";
+    order.fulfillmentStatus = "PROCESSING";
+    await processFulfillment(order);
 
     return NextResponse.json({
       success: true,

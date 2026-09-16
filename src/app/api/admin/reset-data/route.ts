@@ -48,9 +48,22 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const confirmation = typeof body?.confirmation === "string" ? body.confirmation.trim() : "";
+    const providedSecret = typeof body?.secret === "string" ? body.secret.trim() : "";
 
     if (confirmation !== RESET_CONFIRMATION) {
       return NextResponse.json({ error: "Confirmation mismatch" }, { status: 400 });
+    }
+
+    // Require a server-side secret that is only stored in the environment file.
+    // This prevents the endpoint from being triggered even if an admin account
+    // is compromised — the attacker would also need access to the server env.
+    const expectedSecret = process.env.RESET_DATA_SECRET ?? "";
+    if (!expectedSecret) {
+      console.error("[reset-data] RESET_DATA_SECRET env var is not configured. Endpoint is disabled.");
+      return NextResponse.json({ error: "Reset endpoint is not configured on this server." }, { status: 503 });
+    }
+    if (providedSecret !== expectedSecret) {
+      return NextResponse.json({ error: "Invalid reset secret." }, { status: 403 });
     }
 
     const resetResults: Record<string, number> = {};

@@ -34,12 +34,12 @@ function ensureFirebaseConfig() {
 
 // SSL bypass agent — required for Windows machines with broken CA chains
 const agent = new https.Agent({ 
-  rejectUnauthorized: false,
+  rejectUnauthorized: process.env.NODE_ENV === "production",
   keepAlive: true,
   maxSockets: 100,
 });
 
-function httpsRequest(options: https.RequestOptions, body?: string): Promise<string> {
+export function httpsRequest(options: https.RequestOptions, body?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = https.request({ ...options, agent, family: 4 }, (res) => {
       let data = "";
@@ -58,7 +58,7 @@ function httpsRequest(options: https.RequestOptions, body?: string): Promise<str
 // Cache the token with expiry so we don't re-fetch on every request
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt) {
     return cachedToken.token;
   }
@@ -203,12 +203,22 @@ export async function fsQuery(
   const token = await getAccessToken();
   const where = buildWhereClause(filters);
 
+  let cursorObj = {};
+  if (cursor?.values?.length) {
+    cursorObj = {
+      startAt: {
+        values: cursor.values.map((v) => toFirestoreValue(v)),
+        before: cursor.mode === "startAt",
+      },
+    };
+  }
+
   const body: any = {
     structuredQuery: {
       from: [{ collectionId: collection }],
       ...(where ? { where } : {}),
       ...(orderBy ? { orderBy: buildOrderByClauses(orderBy) } : {}),
-      ...(cursor?.values?.length ? { [cursor.mode ?? "startAfter"]: { values: cursor.values.map((v) => toFirestoreValue(v)) } } : {}),
+      ...cursorObj,
       ...(limit ? { limit } : {}),
     },
   };
@@ -232,10 +242,18 @@ export async function fsQuery(
     throw new Error("Invalid JSON from Firestore runQuery: " + response);
   }
 
-  if (results.error) {
+  // Handle single object error
+  if (!Array.isArray(results) && results.error) {
     console.error("Firestore runQuery Error:", results.error);
     throw new Error(`Firestore query failed: ${results.error.message || JSON.stringify(results.error)}`);
   }
+
+  // Handle array-wrapped error (common in runQuery)
+  if (Array.isArray(results) && results.length > 0 && results[0].error) {
+    console.error("Firestore runQuery Error:", results[0].error);
+    throw new Error(`Firestore query failed: ${results[0].error.message || JSON.stringify(results[0].error)}`);
+  }
+
   if (!Array.isArray(results)) return [];
   return results
     .filter((r: any) => r.document)
@@ -375,6 +393,72 @@ export async function fsAdd(collection: string, data: Record<string, any>): Prom
 
 export async function fsUpdate(collection: string, docId: string, data: Record<string, any>): Promise<void> {
   await fsSet(collection, docId, data, true);
+}
+
+/**
+ * Conditionally updates an order's paymentStatus to "SUCCESS" only if it is
+ * currently NOT already "SUCCESS". Uses Firestore REST precondition
+ * (currentDocument.updateTime) to make this safe against concurrent requests.
+ *
+ * Returns true if the update was applied, false if the order was already SUCCESS
+ * (another concurrent request won the race).
+ */
+export async function fsConditionalClaimPayment(
+  orderId: string,
+  updateData: Record<string, any>,
+): Promise<boolean> {
+  // 1. Read the current order to get its updateTime (used as precondition)
+  const token = await getAccessToken();
+  const getResponse = await httpsRequest({
+    hostname: BASE,
+    path: dbPath(`orders/${orderId}`),
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const currentDoc = JSON.parse(getResponse);
+  if (currentDoc.error) return false;
+
+  // 2. If already SUCCESS, don't proceed
+  const currentPaymentStatus = fromFirestoreValue(currentDoc.fields?.paymentStatus);
+  if (currentPaymentStatus === "SUCCESS") return false;
+
+  // 3. Attempt conditional PATCH using the current updateTime as precondition
+  const updateTime = currentDoc.updateTime;
+  const now = new Date().toISOString();
+  const payloadData = { ...updateData, updatedAt: now };
+  const fields: Record<string, any> = {};
+  for (const [k, v] of Object.entries(payloadData)) {
+    fields[k] = toFirestoreValue(v);
+  }
+
+  const maskParams = Object.keys(payloadData)
+    .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
+    .join("&");
+  const preconditionParam = `currentDocument.updateTime=${encodeURIComponent(updateTime)}`;
+  const path = `${dbPath(`orders/${orderId}`)}?${maskParams}&${preconditionParam}`;
+
+  const bodyStr = JSON.stringify({ fields });
+  const response = await httpsRequest({
+    hostname: BASE,
+    path,
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(bodyStr),
+    },
+  }, bodyStr);
+
+  const doc = JSON.parse(response);
+  // HTTP 409 means precondition failed — another request already updated the doc
+  if (doc.error) {
+    const code = doc.error?.code ?? 0;
+    if (code === 409 || doc.error?.status === "ABORTED" || doc.error?.status === "FAILED_PRECONDITION") {
+      return false; // Lost the race — already processed
+    }
+    throw new Error(JSON.stringify(doc.error));
+  }
+  return true;
 }
 
 export async function fsDelete(collection: string, docId: string): Promise<void> {

@@ -3,7 +3,7 @@ import { getBundleById } from "@/lib/bundles";
 import { getNetworkById } from "@/lib/networks";
 import { createOrder, createPayment } from "@/lib/orders";
 import { createOrUpdateCustomer } from "@/lib/customers";
-import { detectNetworkCode, isValidPhone } from "@/lib/phone";
+import { detectNetworkCode, isValidPhone, normalizePhone } from "@/lib/phone";
 
 export async function POST(req: Request) {
   try {
@@ -17,6 +17,8 @@ export async function POST(req: Request) {
     if (!isValidPhone(recipientPhone)) {
       return NextResponse.json({ error: "Invalid phone number format" }, { status: 400 });
     }
+
+    const normalizedPhone = normalizePhone(recipientPhone) || recipientPhone;
 
     // 1. Verify bundle
     const bundle = await getBundleById(bundleId);
@@ -37,18 +39,18 @@ export async function POST(req: Request) {
     }
 
     // 3. Detect network for the snapshot
-    const detectedCode = detectNetworkCode(recipientPhone);
+    const detectedCode = detectNetworkCode(normalizedPhone);
     // Find the network ID for the detected code (we'd need a way to look up by code, for now we will just query it or map it)
     // Actually, network documents in seed have `code` field. We can't query it easily without a new function, but since we are in V1:
     const detectedNetworkId = detectedCode === network.code ? network.id : undefined;
 
     // 4. Create/Get Customer
-    const customer = await createOrUpdateCustomer(recipientPhone);
+    const customer = await createOrUpdateCustomer(normalizedPhone);
 
     // 5. Create Order with snapshotted pricing
     const order = await createOrder({
       customerId: customer.id,
-      recipientPhone,
+      recipientPhone: normalizedPhone,
       networkId,
       detectedNetworkId,
       bundleId,
@@ -61,19 +63,9 @@ export async function POST(req: Request) {
       fulfillmentStatus: "PENDING",
     });
 
-    // 6. Create Payment Record (Mock Paystack for now)
-    const payment = await createPayment({
-      orderId: order.id,
-      provider: "MOCK",
-      amount: bundle.sellingPrice,
-      currency: "GHS",
-      status: "PENDING",
-    });
-
     return NextResponse.json({ 
       success: true, 
-      orderId: order.publicReference, 
-      paymentId: payment.id 
+      orderId: order.publicReference
     });
 
   } catch (error) {

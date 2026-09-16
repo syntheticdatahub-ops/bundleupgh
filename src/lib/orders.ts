@@ -105,9 +105,10 @@ export async function getRecentOrders(limit = 10): Promise<Order[]> {
   return docs as Order[];
 }
 
-export async function getOperationalOrders(limit = 200): Promise<Order[]> {
+export async function getOperationalOrders(): Promise<Order[]> {
   const { fsQuery } = await import("./firestore-rest");
-  const docs = await fsQuery("orders", [], { field: "createdAt", direction: "DESCENDING" }, limit);
+  // Cap at 500 to avoid full-table scans on large datasets
+  const docs = await fsQuery("orders", [], { field: "createdAt", direction: "DESCENDING" }, 500);
   return (docs as Order[])
     .filter((order) => {
       const status = (order.paymentStatus || "").toUpperCase();
@@ -116,16 +117,35 @@ export async function getOperationalOrders(limit = 200): Promise<Order[]> {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function getOperationalOrderMetrics(): Promise<{
+/**
+ * Fetch all orders that need attention (FAILED or ON_HOLD) with a direct targeted query.
+ * This avoids a full table scan for the stuck-orders counter on the Overview page.
+ */
+export async function getStuckOrders(): Promise<Order[]> {
+  const { fsQuery } = await import("./firestore-rest");
+  const [failed, onHold] = await Promise.all([
+    fsQuery("orders", [
+      { field: "paymentStatus", op: "EQUAL", value: "SUCCESS" },
+      { field: "fulfillmentStatus", op: "EQUAL", value: "FAILED" },
+    ]),
+    fsQuery("orders", [
+      { field: "paymentStatus", op: "EQUAL", value: "SUCCESS" },
+      { field: "fulfillmentStatus", op: "EQUAL", value: "ON_HOLD" },
+    ]),
+  ]);
+  const all = [...failed, ...onHold] as Order[];
+  all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return all;
+}
+
+export function getOperationalOrderMetrics(orders: Order[]): {
   totalOrders: number;
   totalRevenue: number;
   deliveredOrders: number;
   pendingOrders: number;
   failedOrders: number;
   estimatedProfit: number;
-}> {
-  const orders = await getOperationalOrders(200);
-
+} {
   const deliveredOrders = orders.filter((order) => {
     const status = (order.fulfillmentStatus || "").toUpperCase();
     return status === "SUCCESS" || status === "DELIVERED";
@@ -151,9 +171,10 @@ export async function getOperationalOrderMetrics(): Promise<{
   };
 }
 
-export async function getNetworkBreakdownStats(networks: Array<{ id: string; name: string; color?: string }>): Promise<Array<{ network: string; color?: string; orders: number; revenue: number }>> {
-  const orders = await getOperationalOrders(200);
-
+export function getNetworkBreakdownStats(
+  networks: Array<{ id: string; name: string; color?: string }>,
+  orders: Order[],
+): Array<{ network: string; color?: string; orders: number; revenue: number }> {
   const grouped = new Map<string, { network: string; color?: string; orders: number; revenue: number }>();
 
   for (const net of networks) {
@@ -225,6 +246,34 @@ export async function getOrdersPage({
   };
 }
 
+export async function getFilteredOrders(paymentFilter: string, fulfillmentFilter: string, networkFilter: string): Promise<Order[]> {
+  const where: any[] = [];
+  
+  if (paymentFilter === "OPERATIONAL") {
+    where.push({ field: "paymentStatus", op: "IN", value: ["SUCCESS", "PAID", "NOT_APPLICABLE"] });
+  } else if (paymentFilter && paymentFilter !== "ALL") {
+    where.push({ field: "paymentStatus", op: "EQUAL", value: paymentFilter });
+  }
+
+  if (fulfillmentFilter && fulfillmentFilter !== "ALL") {
+    where.push({ field: "fulfillmentStatus", op: "EQUAL", value: fulfillmentFilter });
+  }
+
+  if (networkFilter && networkFilter !== "ALL") {
+    where.push({ field: "networkId", op: "EQUAL", value: networkFilter });
+  }
+
+  // Fetch without orderBy so it doesn't require composite indexes for every filter combo!
+  // Cap at 500 to prevent runaway reads — no admin needs to page through more than 500 filtered results at once
+  const docs = await fsQuery("orders", where, undefined, 500);
+  const orders = docs as Order[];
+  
+  // Sort them descending by date
+  orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  return orders;
+}
+
 /**
  * Look up orders by recipient phone across every stored phone representation.
  *
@@ -283,8 +332,7 @@ export async function getSuccessfulOrdersCount(): Promise<number> {
   const { fsCount } = await import("./firestore-rest");
   return fsCount("orders", [
     { field: "fulfillmentStatus", op: "EQUAL", value: "SUCCESS" },
-    { field: "fulfillmentStatus", op: "EQUAL", value: "DELIVERED" },
-  ], "OR");
+  ]);
 }
 
 export async function createPayment(

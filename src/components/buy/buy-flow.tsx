@@ -5,6 +5,7 @@ import { AnimatePresence } from "motion/react"
 import { useSearchParams } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { detectNetworkCode } from "@/lib/phone"
+import posthog from "posthog-js"
 import { StepPhone } from "./step-phone"
 import { StepNetwork } from "./step-network"
 import { StepBundle } from "./step-bundle"
@@ -190,6 +191,12 @@ export function BuyFlow({
         return
       }
 
+      if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
+        posthog.capture("checkout_started", {
+          bundle_id: bundleId,
+          network_id: networkId,
+        })
+      }
       setFlowStatus("processing")
       setStepName("status")
       window.location.href = initData.authorization_url
@@ -208,6 +215,13 @@ export function BuyFlow({
   }
 
   const handleBundleSelect = (id: string) => {
+    const bundle = initialBundles.find((item) => item.id === id)
+    if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
+      posthog.capture("bundle_selected", {
+        bundle_id: id,
+        network_id: bundle?.networkId,
+      })
+    }
     setBundleId(id)
   }
 

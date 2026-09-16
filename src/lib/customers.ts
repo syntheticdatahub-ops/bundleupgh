@@ -1,5 +1,4 @@
 import { fsQuery, fsAdd, fsCount } from "./firestore-rest";
-import { findOrdersByRecipientPhone } from "./orders";
 import { decodeCursor as decodeCursorToken, decodeCursorState, encodeCursor as encodeCursorToken, encodeCursorState } from "./pagination";
 import type { Customer } from "@/types/domain";
 
@@ -106,31 +105,24 @@ export async function getCustomerPageRows({
     cursor,
   });
 
-  const rows = await Promise.all(customers.map(async (customer) => {
-    const customerOrders = await findOrdersByRecipientPhone(customer.phone);
-    const ordered = [...customerOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    const successfulOrders = ordered.filter((o) => {
-      const fs = (o.fulfillmentStatus || "").toUpperCase();
-      return fs === "SUCCESS" || fs === "DELIVERED";
-    });
-
+  const rows = customers.map((customer) => {
     const cPhoneLocal = customer.phone.replace(/\D/g, "");
     const displayPhone = cPhoneLocal.length === 10 ? `+233 ${cPhoneLocal.slice(1).replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}` : customer.phone;
 
     return {
       ...customer,
-      totalOrders: successfulOrders.length,
-      totalSpent: successfulOrders.reduce((sum, o) => sum + (o.sellingPriceSnapshot || 0), 0),
-      lastNetworkId: ordered[0]?.networkId || "Unknown",
-      lastOrderDate: ordered[0] ? new Date(ordered[0].createdAt).toLocaleDateString() : "Never",
-      lastOrderTimestamp: ordered[0] ? new Date(ordered[0].createdAt).getTime() : 0,
-      status: successfulOrders.length > 0 ? "active" : "inactive",
+      totalOrders: customer.totalOrders || 0,
+      totalSpent: customer.totalSpent || 0,
+      lastNetworkId: "-",
+      lastOrderDate: "-",
+      lastOrderTimestamp: customer.createdAt ? new Date(customer.createdAt).getTime() : 0,
+      status: "active",
       displayPhone,
     } as CustomerPageRow;
-  }));
+  });
 
   return {
-    customers: rows.sort((a, b) => b.lastOrderTimestamp - a.lastOrderTimestamp),
+    customers: rows,
     hasNextPage,
     page: safePage,
     pageSize: safePageSize,
@@ -151,4 +143,84 @@ export async function createOrUpdateCustomer(phone: string): Promise<Customer> {
     phone,
   });
   return doc as Customer;
+}
+
+export async function findCustomersByPhone(partial: string): Promise<Customer[]> {
+  // Search by exact phone variants
+  const { generatePhoneVariants } = await import("./phone");
+  const variants = generatePhoneVariants(partial);
+  
+  const allDocs: Customer[] = [];
+  const seen = new Set<string>();
+  
+  for (const variant of variants) {
+    const docs = await fsQuery("customers", [{ field: "phone", op: "EQUAL", value: variant }]);
+    for (const d of docs as Customer[]) {
+      if (!seen.has(d.id)) {
+        seen.add(d.id);
+        allDocs.push(d);
+      }
+    }
+  }
+  
+  // Also try prefix-style: if nothing found, fall back to fetching all and filtering
+  if (allDocs.length === 0) {
+    const all = await fsQuery("customers", [], undefined, 1000);
+    const normalized = partial.replace(/\D/g, "").toLowerCase();
+    for (const d of all as Customer[]) {
+      const dNorm = (d.phone || "").replace(/\D/g, "");
+      if (dNorm.includes(normalized) && !seen.has(d.id)) {
+        seen.add(d.id);
+        allDocs.push(d);
+      }
+    }
+  }
+  
+  return allDocs;
+}
+
+export async function getFilteredCustomers(
+  minOrders: number,
+  maxOrders: number | null,
+  sortBy: string
+): Promise<CustomerPageRow[]> {
+  // Cap at 1000 — enough for any realistic customer base without runaway reads
+  const docs = await fsQuery("customers", [], undefined, 1000);
+  let customers = docs as Customer[];
+  
+  // Apply filters
+  if (minOrders > 0) {
+    customers = customers.filter(c => (c.totalOrders || 0) >= minOrders);
+  }
+  if (maxOrders !== null) {
+    customers = customers.filter(c => (c.totalOrders || 0) <= maxOrders);
+  }
+
+  // Sort
+  if (sortBy === "MOST_ACTIVE") {
+    customers.sort((a, b) => (b.totalOrders || 0) - (a.totalOrders || 0) || (b.totalSpent || 0) - (a.totalSpent || 0));
+  } else if (sortBy === "HIGHEST_SPEND") {
+    customers.sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0));
+  } else if (sortBy === "NEWEST") {
+    customers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } else if (sortBy === "OLDEST") {
+    customers.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
+  return customers.map((customer) => {
+    const cPhoneLocal = customer.phone.replace(/\D/g, "");
+    const displayPhone = cPhoneLocal.length === 10
+      ? `+233 ${cPhoneLocal.slice(1).replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}`
+      : customer.phone;
+    return {
+      ...customer,
+      totalOrders: customer.totalOrders || 0,
+      totalSpent: customer.totalSpent || 0,
+      lastNetworkId: "-",
+      lastOrderDate: "-",
+      lastOrderTimestamp: customer.createdAt ? new Date(customer.createdAt).getTime() : 0,
+      status: "active" as const,
+      displayPhone,
+    };
+  });
 }

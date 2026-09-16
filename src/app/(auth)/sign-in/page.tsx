@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { motion } from "motion/react"
 import { signInWithEmailAndPassword } from "firebase/auth"
 import { auth } from "@/lib/firebase/client"
+import posthog from "posthog-js"
 import {
   ZapIcon,
   MailIcon,
@@ -75,6 +76,10 @@ export default function SignInPage() {
       })
 
       if (res.ok) {
+        if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
+          posthog.identify(userCredential.user.uid)
+          posthog.capture("admin_sign_in_completed")
+        }
         setIsSuccess(true)
         setTimeout(() => {
           router.push("/admin")
