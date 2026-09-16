@@ -4,13 +4,19 @@ import { fulfillDataMartOrder } from "@/lib/datamart";
 import type { Order } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
-    // 1. Authorization: Support Vercel CRON_SECRET if provided
-    const authHeader = req.headers.get("authorization");
-    if (process.env.CRON_SECRET) {
-      if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    const cronSecret = process.env.CRON_SECRET || process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    const authHeader = req.headers.get("authorization") || req.headers.get("x-vercel-cron") || "";
+
+    if (cronSecret) {
+      const bearerToken = `Bearer ${cronSecret}`;
+      const rawToken = cronSecret;
+      const isAuthorized = authHeader === bearerToken || authHeader === rawToken;
+
+      if (!isAuthorized) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
     }
