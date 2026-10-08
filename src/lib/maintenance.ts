@@ -44,11 +44,6 @@ function readEnvOverride(): MaintenanceState | null {
 }
 
 export async function getMaintenanceState(forceRefresh = false): Promise<MaintenanceState> {
-  const envOverride = readEnvOverride();
-  if (envOverride) {
-    return envOverride;
-  }
-
   const now = Date.now();
   if (!forceRefresh && maintenanceCache && maintenanceCache.expiresAt > now) {
     return maintenanceCache.state;
@@ -56,15 +51,19 @@ export async function getMaintenanceState(forceRefresh = false): Promise<Mainten
 
   try {
     const doc = await fsGet("settings", "maintenance");
-    const state = normalizeMaintenanceState(doc ?? null);
+    // An explicit admin setting must override deployment defaults so the
+    // maintenance switch can be changed without a Vercel redeployment.
+    const state = doc
+      ? normalizeMaintenanceState(doc)
+      : readEnvOverride() ?? normalizeMaintenanceState(null);
     maintenanceCache = { state, expiresAt: now + MAINTENANCE_CACHE_TTL_MS };
     return state;
   } catch {
-    const fallback: MaintenanceState = {
+    const fallback = readEnvOverride() ?? {
       enabled: false,
       message: DEFAULT_MAINTENANCE_MESSAGE,
       updatedAt: new Date().toISOString(),
-      source: "default",
+      source: "default" as const,
     };
     maintenanceCache = { state: fallback, expiresAt: now + MAINTENANCE_CACHE_TTL_MS };
     return fallback;

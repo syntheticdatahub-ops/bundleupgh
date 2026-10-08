@@ -84,6 +84,7 @@ export async function getOrderByFulfillmentProviderReference(reference: string):
 }
 
 export const DEFAULT_ADMIN_PAGE_SIZE = 25;
+export const RECONCILIATION_PAGE_SIZE = 100;
 
 export function encodeCursor(doc: Pick<Order, "id" | "createdAt">): string {
   return encodeCursorToken(doc, "orders");
@@ -243,6 +244,35 @@ export async function getOrdersPage({
     page: safePage,
     pageSize: safePageSize,
     nextCursor: hasNextPage && orders.length > 0 ? encodeCursor(orders[orders.length - 1]) : undefined,
+  };
+}
+
+export async function getReconciliationOrdersPage(
+  paymentStatus: "SUCCESS" | "PAID" | "NOT_APPLICABLE",
+  afterId?: string,
+): Promise<{ orders: Order[]; hasMore: boolean; nextCursor?: string }> {
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? process.env.FIREBASE_PROJECT_ID ?? "unknown-project";
+  const docs = await fsQuery(
+    "orders",
+    [{ field: "paymentStatus", op: "EQUAL", value: paymentStatus }],
+    { field: "__name__", direction: "ASCENDING" },
+    RECONCILIATION_PAGE_SIZE + 1,
+    afterId
+      ? {
+          values: [{
+            referenceValue: `projects/${projectId}/databases/(default)/documents/orders/${afterId}`,
+          }],
+          mode: "startAfter",
+        }
+      : undefined,
+  );
+
+  const hasMore = docs.length > RECONCILIATION_PAGE_SIZE;
+  const orders = docs.slice(0, RECONCILIATION_PAGE_SIZE) as Order[];
+  return {
+    orders,
+    hasMore,
+    nextCursor: hasMore ? orders[orders.length - 1]?.id : undefined,
   };
 }
 

@@ -24,6 +24,20 @@ if (!projectToken) {
     capture_exceptions: true,
     tracing_headers: [window.location.hostname],
     debug: process.env.NODE_ENV === "development",
+    before_send: (event) => {
+      if (!event) return null;
+      if (event.event === "$exception") {
+        const exceptionList = (event.properties as any)?.$exception_list;
+        const primary =
+          exceptionList?.[0]?.value ??
+          (event.properties as any)?.$exception_values?.[0];
+
+        if (typeof primary === "string" && /^Script error\.?$/i.test(primary.trim())) {
+          return null;
+        }
+      }
+      return event;
+    },
   });
 
   let identifiedUserId: string | null = null;

@@ -1,4 +1,5 @@
 import { AdminOrdersTable } from "@/components/admin/orders-table"
+import { SyncAllOrdersButton } from "@/components/admin/sync-all-orders-button"
 import { getOrdersPage } from "@/lib/orders"
 import { getNetworks } from "@/lib/networks"
 
@@ -59,9 +60,12 @@ export default async function AdminOrdersPage({
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
-        <p className="text-muted-foreground">All transactions across every network.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
+          <p className="text-muted-foreground">All transactions across every network.</p>
+        </div>
+        <SyncAllOrdersButton />
       </div>
       <AdminOrdersTable
         initialOrders={orders}

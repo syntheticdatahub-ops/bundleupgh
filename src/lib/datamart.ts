@@ -1,8 +1,11 @@
-import { Order } from "@/types/domain";
+import type { FulfillmentStatus, Order } from "@/types/domain";
 import https from "node:https";
 import crypto from "node:crypto";
 import { normalizePhone } from "./phone";
 import { fsUpdate } from "./firestore-rest";
+import { mapDataMartFulfillmentStatus } from "./datamart-status";
+
+export { mapDataMartFulfillmentStatus } from "./datamart-status";
 
 const DATAMART_API_KEY = process.env.DATAMART_API_KEY;
 const DATAMART_WEBHOOK_SECRET = process.env.DATAMART_WEBHOOK_SECRET;
@@ -73,6 +76,10 @@ async function dataMartRequest<T>(endpoint: string, method: "GET" | "POST", body
       res.on("end", () => {
         try {
           const json = JSON.parse(data);
+          if ((res.statusCode ?? 500) < 200 || (res.statusCode ?? 500) >= 300) {
+            reject(new Error(`DataMart request failed (${res.statusCode}): ${json.message || "Provider error"}`));
+            return;
+          }
           resolve(json);
         } catch (e) {
           reject(new Error(`Invalid JSON response from DataMart: ${data}`));
@@ -81,6 +88,7 @@ async function dataMartRequest<T>(endpoint: string, method: "GET" | "POST", body
     });
 
     req.on("error", (e) => reject(e));
+    req.setTimeout(10000, () => req.destroy(new Error("DataMart request timed out")));
     if (body) {
       req.write(JSON.stringify(body));
     }
@@ -159,6 +167,46 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
   }
 }
 
+export async function getDataMartOrderStatus(reference: string): Promise<{
+  fulfillmentStatus: FulfillmentStatus;
+  providerStatus: string;
+}> {
+  const response = await dataMartRequest<{
+    status?: string;
+    message?: string;
+    data?: {
+      orderStatus?: unknown;
+      status?: unknown;
+      trackStatus?: unknown;
+      deliveryStatus?: unknown;
+    } | null;
+  }>(
+    `/api/developer/order-status/${encodeURIComponent(reference)}`,
+    "GET",
+  );
+
+  if (response.status !== "success" || !response.data) {
+    throw new Error(response.message || "DataMart did not return an order status.");
+  }
+
+  const inner = response.data;
+  const rawStatus =
+    inner.orderStatus ??
+    inner.status ??
+    inner.trackStatus ??
+    inner.deliveryStatus;
+  const fulfillmentStatus = mapDataMartFulfillmentStatus(rawStatus);
+
+  if (typeof rawStatus !== "string" || !fulfillmentStatus) {
+    throw new Error(`Unsupported DataMart order status: ${String(rawStatus ?? "missing")}`);
+  }
+
+  return {
+    fulfillmentStatus,
+    providerStatus: rawStatus,
+  };
+}
+
 export async function syncDataMartOrderStatus(order: Order): Promise<Order["fulfillmentStatus"] | null> {
   if (
     order.fulfillmentStatus === "SUCCESS" || 
@@ -172,61 +220,24 @@ export async function syncDataMartOrderStatus(order: Order): Promise<Order["fulf
   if (!reference) return null;
 
   try {
-    const response = await dataMartRequest<any>(`/api/developer/order-status/${encodeURIComponent(reference)}`, "GET");
-    
-    // DataMart envelope: { status: "success", data: { orderStatus, status, ... } }
-    // The envelope status:"success" just means the API call worked.
-    // The actual delivery state is inside response.data.
-    if (response.status === "success" && response.data) {
-      const inner = response.data;
-      // Try multiple field names DataMart may use
-      const orderStatus = (
-        inner.orderStatus ??
-        inner.status ??
-        inner.trackStatus ??
-        inner.deliveryStatus ??
-        ""
-      ).toLowerCase().replace(/[_\s-]/g, "_");
-      
-      let newFulfillmentStatus: Order["fulfillmentStatus"] = order.fulfillmentStatus;
-      
-      if (orderStatus === "completed" || orderStatus === "complete") {
-        newFulfillmentStatus = "SUCCESS";
-      } else if (orderStatus === "failed" || orderStatus === "rejected") {
-        newFulfillmentStatus = "FAILED";
-      } else if (
-        orderStatus === "waiting" ||
-        orderStatus === "on_hold" ||
-        orderStatus === "beneficiary_not_allowed" ||
-        orderStatus === "not_allowed" ||
-        orderStatus === "pending_verification"
-      ) {
-        newFulfillmentStatus = "ON_HOLD";
-      } else if (orderStatus === "refunded") {
-        newFulfillmentStatus = "REFUNDED";
-      } else if (orderStatus === "processing" || orderStatus === "created" || orderStatus === "pending") {
-        newFulfillmentStatus = "PROCESSING";
-      }
+    const result = await getDataMartOrderStatus(reference);
+    if (result.fulfillmentStatus === order.fulfillmentStatus) return null;
 
-      await fsUpdate("orders", order.id, {
-        fulfillmentStatus: newFulfillmentStatus,
-        providerStatus: inner.orderStatus ?? inner.status ?? orderStatus,
-        lastProviderEventAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+    await fsUpdate("orders", order.id, {
+      fulfillmentStatus: result.fulfillmentStatus,
+      providerStatus: result.providerStatus,
+      lastProviderEventAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
 
-      console.log(`[syncDataMartOrderStatus] ${order.id}: ${order.fulfillmentStatus} → ${newFulfillmentStatus} (DataMart: ${orderStatus})`);
-      
-      if (newFulfillmentStatus === "SUCCESS" && order.customerId) {
-        const { recordCustomerOrderSuccess } = await import("./customer-stats");
-        await recordCustomerOrderSuccess(order.customerId, order.sellingPriceSnapshot);
-      }
+    console.log(`[syncDataMartOrderStatus] ${order.id}: ${order.fulfillmentStatus} → ${result.fulfillmentStatus} (DataMart: ${result.providerStatus})`);
 
-      return newFulfillmentStatus;
-    } else {
-      console.warn(`[syncDataMartOrderStatus] Unexpected response for ${order.id}:`, JSON.stringify(response).slice(0, 200));
-      return null;
+    if (result.fulfillmentStatus === "SUCCESS" && order.customerId) {
+      const { recordCustomerOrderSuccess } = await import("./customer-stats");
+      await recordCustomerOrderSuccess(order.customerId, order.sellingPriceSnapshot);
     }
+
+    return result.fulfillmentStatus;
   } catch (error: any) {
     console.error(`DataMart status sync failed for ${order.id}:`, error);
     return null;
