@@ -13,15 +13,48 @@ type ReconciliationSummary = {
   failures: Array<{ id: string; reference: string; error: string }>;
 };
 
+type ReconciliationResponse = {
+  success: boolean;
+  done: boolean;
+  nextCursor: { afterId?: string } | null;
+  nextAllowedAt: string | null;
+  summary: ReconciliationSummary;
+  error?: string;
+};
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function addSummaries(
+  total: ReconciliationSummary,
+  batch: ReconciliationSummary,
+): ReconciliationSummary {
+  const transitions = { ...total.transitions };
+  for (const [transition, count] of Object.entries(batch.transitions)) {
+    transitions[transition] = (transitions[transition] ?? 0) + count;
+  }
+
+  return {
+    checked: total.checked + batch.checked,
+    updated: total.updated + batch.updated,
+    unchanged: total.unchanged + batch.unchanged,
+    failed: total.failed + batch.failed,
+    transitions,
+    failures: [...total.failures, ...batch.failures],
+  };
+}
+
 export function SyncAllOrdersButton() {
   const router = useRouter();
   const [isSyncing, setIsSyncing] = useState(false);
   const [summary, setSummary] = useState<ReconciliationSummary | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
 
   const syncOrders = async () => {
     if (!window.confirm(
-      "Reconcile all paid orders with DataMart? This checks orders that have a DataMart reference and updates fulfillment status only.",
+      "Reconcile paid orders currently marked Processing with DataMart? Only fulfillment status will be updated.",
     )) {
       return;
     }
@@ -29,20 +62,52 @@ export function SyncAllOrdersButton() {
     setIsSyncing(true);
     setSummary(null);
     setRequestError(null);
+    setProgressMessage("Starting DataMart reconciliation…");
 
     try {
-      const response = await fetch("/api/admin/orders/sync", { method: "POST" });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || "Order reconciliation failed.");
-      }
+      let cursor: ReconciliationResponse["nextCursor"] = null;
+      let total: ReconciliationSummary = {
+        checked: 0,
+        updated: 0,
+        unchanged: 0,
+        failed: 0,
+        transitions: {},
+        failures: [],
+      };
 
-      setSummary(result.summary as ReconciliationSummary);
+      do {
+        setProgressMessage(`Checking processing orders (${total.checked} checked so far)…`);
+        const response = await fetch("/api/admin/orders/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cursor }),
+        });
+        const result = await response.json() as ReconciliationResponse;
+        if (!response.ok) {
+          throw new Error(result.error || "Order reconciliation failed.");
+        }
+
+        total = addSummaries(total, result.summary);
+        setSummary(total);
+        cursor = result.nextCursor;
+
+        if (!result.done && result.nextAllowedAt) {
+          const delay = Math.max(0, Date.parse(result.nextAllowedAt) - Date.now());
+          setProgressMessage(
+            `Checked ${total.checked} orders. Waiting before the next rate-limited batch…`,
+          );
+          if (delay > 0) await wait(delay);
+        }
+      } while (cursor);
+
+      setSummary(total);
+      setProgressMessage(null);
       router.refresh();
     } catch (error) {
       setRequestError(error instanceof Error ? error.message : "Order reconciliation failed.");
     } finally {
       setIsSyncing(false);
+      setProgressMessage(null);
     }
   };
 
@@ -58,6 +123,12 @@ export function SyncAllOrdersButton() {
         {isSyncing ? "Syncing orders…" : "Sync All Orders"}
       </button>
 
+      {progressMessage && (
+        <p role="status" aria-live="polite" className="max-w-xl text-sm text-muted-foreground">
+          {progressMessage}
+        </p>
+      )}
+
       {requestError && (
         <p role="alert" className="max-w-xl text-sm text-destructive">
           {requestError}
@@ -69,7 +140,7 @@ export function SyncAllOrdersButton() {
           aria-live="polite"
           className="w-full max-w-xl rounded-md border bg-card p-4 text-sm shadow-sm sm:w-auto"
         >
-          <h2 className="font-semibold">Sync completed</h2>
+          <h2 className="font-semibold">{isSyncing ? "Sync in progress" : "Sync completed"}</h2>
           <p className="mt-2">
             {summary.checked} orders checked · {summary.updated} updated · {summary.unchanged} unchanged · {summary.failed} failed to sync
           </p>

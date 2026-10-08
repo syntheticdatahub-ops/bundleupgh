@@ -153,9 +153,10 @@ The `src/lib/firestore-rest.ts` helper uses a service-account-signed OAuth token
 The Orders admin page provides **Sync All Orders**. The server-side endpoint:
 
 - Requires a valid admin session and an account matching the existing admin UID/email allowlist.
-- Reads paid/operational orders from Firestore in pages of 100.
+- Reads orders currently marked `PROCESSING` from Firestore in pages of 100, then checks only paid/operational orders.
 - Checks orders that have a DataMart provider reference (the fulfillment provider reference, with the legacy provider reference as fallback).
-- Queries DataMart's individual order-status endpoint with at most five concurrent lookups.
+- Queries DataMart's individual order-status endpoint in server-side batches of at most 20, with at most five concurrent lookups and a conservative ceiling of 80 lookups per minute.
+- Returns a continuation cursor for each batch; the admin UI requests the next backend batch after the indicated rate-limit delay and displays progress.
 - Writes only a changed fulfillment status and does not call the purchase/fulfillment endpoint.
 - Reports transitions and per-order lookup failures. Running it again is safe; matching statuses are not rewritten.
 

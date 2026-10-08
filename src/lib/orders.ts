@@ -248,13 +248,12 @@ export async function getOrdersPage({
 }
 
 export async function getReconciliationOrdersPage(
-  paymentStatus: "SUCCESS" | "PAID" | "NOT_APPLICABLE",
   afterId?: string,
 ): Promise<{ orders: Order[]; hasMore: boolean; nextCursor?: string }> {
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? process.env.FIREBASE_PROJECT_ID ?? "unknown-project";
   const docs = await fsQuery(
     "orders",
-    [{ field: "paymentStatus", op: "EQUAL", value: paymentStatus }],
+    [{ field: "fulfillmentStatus", op: "EQUAL", value: "PROCESSING" }],
     { field: "__name__", direction: "ASCENDING" },
     RECONCILIATION_PAGE_SIZE + 1,
     afterId
