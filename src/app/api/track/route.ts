@@ -15,6 +15,7 @@ export type PublicOrder = {
   amount: number;
   paymentStatus: string;
   fulfillmentStatus: string;
+  deliveredAt?: string;
   createdAt: string;
 };
 
@@ -35,6 +36,9 @@ function toPublicOrder(doc: any): PublicOrder {
     amount: Number(doc.sellingPriceSnapshot ?? 0),
     paymentStatus: (doc.paymentStatus ?? "PENDING").toUpperCase(),
     fulfillmentStatus: (doc.fulfillmentStatus ?? "PENDING").toUpperCase(),
+    deliveredAt: (doc.fulfillmentStatus ?? "").toUpperCase() === "SUCCESS"
+      ? doc.deliveredAt ?? (doc.providerEvent === "order.completed" ? doc.providerUpdatedAt : undefined)
+      : undefined,
     createdAt: doc.createdAt ?? "",
   };
 }

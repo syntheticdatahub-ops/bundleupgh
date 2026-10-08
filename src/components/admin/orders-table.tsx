@@ -61,6 +61,23 @@ function formatDate(iso: string) {
   }
 }
 
+function formatDateTime(iso: string) {
+  try {
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return iso
+    return date.toLocaleString("en-GB", {
+      timeZone: "Africa/Accra",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  } catch {
+    return iso
+  }
+}
+
 export function AdminOrdersTable({
   initialOrders,
   networks,
@@ -594,6 +611,12 @@ export function AdminOrdersTable({
                           >
                             {FULFILLMENT_LABELS[(order.fulfillmentStatus || "").toUpperCase()] || (order.fulfillmentStatus?.toUpperCase() === "DELIVERED" ? FULFILLMENT_LABELS["SUCCESS"] : order.fulfillmentStatus)}
                           </Badge>
+                          {order.fulfillmentStatus === "SUCCESS" &&
+                            (order.deliveredAt || (order.providerEvent === "order.completed" ? order.providerUpdatedAt : undefined)) && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Delivered {formatDateTime(order.deliveredAt || order.providerUpdatedAt!)}
+                              </span>
+                            )}
                           {(order.fulfillmentProviderReference || order.providerReference) && (
                             <span className="text-[10px] text-muted-foreground font-mono">
                               {order.fulfillmentProviderReference || order.providerReference}

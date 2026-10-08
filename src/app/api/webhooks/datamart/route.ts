@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyDataMartWebhookSignature } from "@/lib/datamart";
+import { getDataMartDeliveredAt } from "@/lib/datamart-status";
 import { fsQuery, fsAdd, fsUpdate, fsGet, fsSet } from "@/lib/firestore-rest";
 import { getOrderByFulfillmentProviderReference } from "@/lib/orders";
 import { Order, WebhookEvent } from "@/types/domain";
@@ -98,6 +99,10 @@ export async function POST(req: Request) {
 
     if (data.transactionId) {
       updateData.fulfillmentProviderTransactionId = data.transactionId;
+    }
+    if (event === "order.completed") {
+      const deliveredAt = getDataMartDeliveredAt(data);
+      if (deliveredAt) updateData.deliveredAt = deliveredAt;
     }
 
     await fsUpdate("orders", order.id, updateData);

@@ -356,6 +356,8 @@ function formatDate(iso?: string) {
 export function OrderDetailDrawer({ order, networks, open, onClose, onOrderUpdated }: Props) {
   const [isDeleting, setIsDeleting] = useState(false)
   const net = order ? networks.find((n) => n.id === order.networkId) : null
+  const deliveredAt = order?.deliveredAt ||
+    (order?.providerEvent === "order.completed" ? order.providerUpdatedAt : undefined)
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -439,6 +441,9 @@ export function OrderDetailDrawer({ order, networks, open, onClose, onOrderUpdat
                 <DetailRow label="Provider Event" value={order.providerEvent} mono />
                 <DetailRow label="Provider Ref" value={order.fulfillmentProviderReference || order.providerReference} mono copyable />
                 <DetailRow label="Transaction ID" value={order.fulfillmentProviderTransactionId} mono copyable />
+                {order.fulfillmentStatus === "SUCCESS" && deliveredAt && (
+                  <DetailRow label="Delivered At" value={formatDate(deliveredAt)} />
+                )}
                 {order.autoRetryCount !== undefined && order.autoRetryCount > 0 && (
                   <div className="flex items-start justify-between gap-4 py-2 border-b">
                     <span className="text-xs text-muted-foreground min-w-[130px]">Auto-Retries</span>

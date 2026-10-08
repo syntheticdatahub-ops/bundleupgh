@@ -25,6 +25,7 @@ BundleUp is a Ghana-focused data bundle ordering and administration platform. Cu
 - Admin dashboard for orders, customers, bundles, transactions, notifications, and support.
 - Admin order status controls, fulfillment retry, and manual fulfillment.
 - **Sync All Orders** to manually reconcile local fulfillment statuses against DataMart.
+- Provider-reported delivery timestamps on delivered orders in customer tracking and admin order views.
 - Admin maintenance-mode control with a customizable public-facing message.
 - Automatic retry of eligible failed fulfillment orders through a scheduled Vercel route.
 - Firebase Authentication for admin sessions and Firestore-backed application data.
@@ -158,6 +159,7 @@ The Orders admin page provides **Sync All Orders**. The server-side endpoint:
 - Queries DataMart's individual order-status endpoint in server-side batches of at most 20, with at most five concurrent lookups and a conservative ceiling of 80 lookups per minute.
 - Returns a continuation cursor for each batch; the admin UI requests the next backend batch after the indicated rate-limit delay and displays progress.
 - Writes only a changed fulfillment status and does not call the purchase/fulfillment endpoint.
+- Stores DataMart's delivery/completion time when available and exposes it on public tracking and admin order views; it does not substitute payment or local update time.
 - Reports transitions and per-order lookup failures. Running it again is safe; matching statuses are not rewritten.
 
 The current fulfillment mapping follows the existing DataMart status handling: completed/delivered becomes `SUCCESS`, failed/rejected becomes `FAILED`, waiting/verification states become `ON_HOLD`, refunded becomes `REFUNDED`, and processing/created/pending becomes `PROCESSING`. DataMart cancellation is mapped to the existing local `FAILED` state.

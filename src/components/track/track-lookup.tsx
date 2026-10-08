@@ -35,6 +35,7 @@ type PublicOrder = {
   amount: number;
   paymentStatus: string;
   fulfillmentStatus: string;
+  deliveredAt?: string;
   createdAt: string;
 }
 
@@ -165,7 +166,11 @@ export function TrackLookup() {
         // If the selected order's status changed, update the panel too
         if (selectedOrder) {
           const fresh = freshOrders.find((o) => o.orderReference === selectedOrder.orderReference)
-          if (fresh && fresh.fulfillmentStatus !== selectedOrder.fulfillmentStatus) {
+          if (
+            fresh &&
+            (fresh.fulfillmentStatus !== selectedOrder.fulfillmentStatus ||
+              fresh.deliveredAt !== selectedOrder.deliveredAt)
+          ) {
             setSelectedOrder(fresh)
           }
         }
@@ -485,6 +490,12 @@ export function TrackLookup() {
                       </p>
                     )}
                     <p className="text-muted-foreground text-sm mt-1">{formatDate(selectedOrder.createdAt)}</p>
+                    {(selectedOrder.fulfillmentStatus === "SUCCESS" || selectedOrder.fulfillmentStatus === "DELIVERED") &&
+                      selectedOrder.deliveredAt && (
+                        <p className="text-sm font-medium text-green-700 dark:text-green-400 mt-1">
+                          Delivered {formatDate(selectedOrder.deliveredAt)}
+                        </p>
+                      )}
                   </div>
                 </div>
 
@@ -713,5 +724,3 @@ function LiveDeliveryTracker({
     </div>
   )
 }
-
-

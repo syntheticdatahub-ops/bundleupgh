@@ -108,6 +108,9 @@ export async function POST(req: Request) {
 
             await fsUpdate("orders", order.id, {
               fulfillmentStatus: providerStatus.fulfillmentStatus,
+              ...(providerStatus.fulfillmentStatus === "SUCCESS" && providerStatus.deliveredAt
+                ? { deliveredAt: providerStatus.deliveredAt }
+                : {}),
             });
 
             const transition = `${getStatusLabel(order.fulfillmentStatus)} → ${getStatusLabel(providerStatus.fulfillmentStatus)}`;

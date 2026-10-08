@@ -77,6 +77,7 @@ export interface Order {
   providerEvent?: string;
   providerMessage?: string;
   providerUpdatedAt?: string;
+  deliveredAt?: string;
   lastProviderEventAt?: string;
   autoRetryCount?: number;
   

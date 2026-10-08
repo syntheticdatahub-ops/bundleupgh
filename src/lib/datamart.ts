@@ -3,9 +3,9 @@ import https from "node:https";
 import crypto from "node:crypto";
 import { normalizePhone } from "./phone";
 import { fsUpdate } from "./firestore-rest";
-import { mapDataMartFulfillmentStatus } from "./datamart-status";
+import { getDataMartDeliveredAt, mapDataMartFulfillmentStatus } from "./datamart-status";
 
-export { mapDataMartFulfillmentStatus } from "./datamart-status";
+export { getDataMartDeliveredAt, mapDataMartFulfillmentStatus } from "./datamart-status";
 
 const DATAMART_API_KEY = process.env.DATAMART_API_KEY;
 const DATAMART_WEBHOOK_SECRET = process.env.DATAMART_WEBHOOK_SECRET;
@@ -135,12 +135,16 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
         newFulfillmentStatus = "FAILED";
       }
 
+      const deliveredAt = newFulfillmentStatus === "SUCCESS"
+        ? getDataMartDeliveredAt(response.data)
+        : null;
       await fsUpdate("orders", order.id, {
         fulfillmentStatus: newFulfillmentStatus,
         fulfillmentProviderReference: response.data.orderReference || undefined,
         fulfillmentProviderTransactionId: response.data.transactionId || response.data.transactionReference || undefined,
         providerReference: transactionReference || undefined, // Legacy
         providerStatus: orderStatus,
+        ...(deliveredAt ? { deliveredAt } : {}),
         updatedAt: new Date().toISOString(),
       });
       console.log(`DataMart fulfillment success for ${order.id}. Status: ${newFulfillmentStatus}`);
@@ -170,6 +174,7 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
 export async function getDataMartOrderStatus(reference: string): Promise<{
   fulfillmentStatus: FulfillmentStatus;
   providerStatus: string;
+  deliveredAt?: string;
 }> {
   const response = await dataMartRequest<{
     status?: string;
@@ -179,6 +184,14 @@ export async function getDataMartOrderStatus(reference: string): Promise<{
       status?: unknown;
       trackStatus?: unknown;
       deliveryStatus?: unknown;
+      deliveredAt?: unknown;
+      delivered_at?: unknown;
+      deliveryTime?: unknown;
+      deliveryDate?: unknown;
+      completedAt?: unknown;
+      completed_at?: unknown;
+      updatedAt?: unknown;
+      timestamps?: unknown;
     } | null;
   }>(
     `/api/developer/order-status/${encodeURIComponent(reference)}`,
@@ -204,6 +217,7 @@ export async function getDataMartOrderStatus(reference: string): Promise<{
   return {
     fulfillmentStatus,
     providerStatus: rawStatus,
+    deliveredAt: fulfillmentStatus === "SUCCESS" ? getDataMartDeliveredAt(inner) ?? undefined : undefined,
   };
 }
 
@@ -226,6 +240,7 @@ export async function syncDataMartOrderStatus(order: Order): Promise<Order["fulf
     await fsUpdate("orders", order.id, {
       fulfillmentStatus: result.fulfillmentStatus,
       providerStatus: result.providerStatus,
+      ...(result.deliveredAt ? { deliveredAt: result.deliveredAt } : {}),
       lastProviderEventAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
