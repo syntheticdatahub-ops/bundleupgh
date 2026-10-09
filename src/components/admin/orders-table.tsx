@@ -7,7 +7,7 @@ import { decodeCursorState, encodeCursorState } from "@/lib/pagination"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { SearchIcon, ChevronRightIcon, FilterIcon } from "lucide-react"
+import { SearchIcon, ChevronRightIcon, FilterIcon, Loader2, RotateCcw } from "lucide-react"
 import { OrderDetailDrawer } from "@/components/admin/order-detail-drawer"
 import type { Order, Network } from "@/types/domain"
 
@@ -47,6 +47,14 @@ const PAYMENT_LABELS: Record<string, string> = {
   FAILED: "Failed",
   REFUNDED: "Refunded",
   NOT_APPLICABLE: "N/A",
+}
+
+type BulkRetryResult = {
+  id: string
+  reference: string
+  outcome: "retried" | "skipped" | "error"
+  status?: Order["fulfillmentStatus"]
+  message?: string
 }
 
 function formatDate(iso: string) {
@@ -134,6 +142,8 @@ export function AdminOrdersTable({
   
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
   const [isBulkLoading, setIsBulkLoading] = useState(false)
+  const [bulkRetryResults, setBulkRetryResults] = useState<BulkRetryResult[]>([])
+  const [retryProgress, setRetryProgress] = useState<string | null>(null)
   const [globalRef, setGlobalRef] = useState("")
 
   useEffect(() => {
@@ -325,6 +335,86 @@ export function AdminOrdersTable({
     })
   }, [orders, query, networks, paymentFilter, networkFilter, fulfillmentFilter, dateFilter, dateFrom, dateTo])
 
+  const selectedFailedOrderIds = filtered
+    .filter((order) =>
+      selectedOrderIds.has(order.id) &&
+      order.fulfillmentStatus === "FAILED" &&
+      (order.paymentStatus === "SUCCESS" || order.paymentStatus === "NOT_APPLICABLE")
+    )
+    .map((order) => order.id)
+
+  const handleRetryFailedOrders = async () => {
+    const orderIds = [...selectedFailedOrderIds]
+    if (orderIds.length === 0 || isBulkLoading) return
+
+    if (!window.confirm(
+      `Retry delivery for ${orderIds.length} selected failed order${orderIds.length === 1 ? "" : "s"}? ` +
+      "This will send new fulfillment requests to DataMart. Only paid orders currently marked Failed will be retried."
+    )) {
+      return
+    }
+
+    const batchSize = 1
+    const results: BulkRetryResult[] = []
+    setBulkRetryResults([])
+    setIsBulkLoading(true)
+
+    try {
+      for (let start = 0; start < orderIds.length; start += batchSize) {
+        const batch = orderIds.slice(start, start + batchSize)
+        setRetryProgress(`Retrying ${Math.min(start + batch.length, orderIds.length)} of ${orderIds.length}…`)
+
+        try {
+          const response = await fetch("/api/admin/orders/retry-failed", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderIds: batch }),
+          })
+          const data = await response.json()
+          if (!response.ok) {
+            throw new Error(data.error || "The retry batch could not be processed.")
+          }
+
+          const batchResults = data.results as BulkRetryResult[]
+          results.push(...batchResults)
+          setOrders((current) => current.map((order) => {
+            const result = batchResults.find((item) => item.id === order.id)
+            return result?.status
+              ? { ...order, fulfillmentStatus: result.status, providerError: result.message }
+              : order
+          }))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "The retry batch could not be processed."
+          results.push(...batch.map((id) => ({
+            id,
+            reference: orders.find((order) => order.id === id)?.publicReference || id,
+            outcome: "error" as const,
+            message,
+          })))
+        }
+
+        setBulkRetryResults([...results])
+        if (start + batchSize < orderIds.length) {
+          await new Promise((resolve) => window.setTimeout(resolve, 2000))
+        }
+      }
+    } finally {
+      setIsBulkLoading(false)
+      setRetryProgress(null)
+      setSelectedOrderIds(new Set())
+      router.refresh()
+    }
+  }
+
+  const retryCounts = {
+    processing: bulkRetryResults.filter((result) => result.status === "PROCESSING").length,
+    delivered: bulkRetryResults.filter((result) => result.status === "SUCCESS").length,
+    failed: bulkRetryResults.filter((result) => result.status === "FAILED").length,
+    onHold: bulkRetryResults.filter((result) => result.status === "ON_HOLD").length,
+    skipped: bulkRetryResults.filter((result) => result.outcome === "skipped").length,
+    errors: bulkRetryResults.filter((result) => result.outcome === "error").length,
+  }
+
   return (
     <>
       <Card>
@@ -342,6 +432,17 @@ export function AdminOrdersTable({
               </div>
               
               <div className="flex items-center gap-4">
+                {selectedFailedOrderIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleRetryFailedOrders}
+                    disabled={isBulkLoading}
+                    className="inline-flex h-9 items-center gap-2 rounded-md bg-red-600 px-3 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isBulkLoading ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                    {isBulkLoading ? retryProgress : `Retry Failed (${selectedFailedOrderIds.length})`}
+                  </button>
+                )}
                 {selectedOrderIds.size > 0 && (
                   <select
                     className="h-9 rounded-md border border-input bg-primary text-primary-foreground px-3 py-1 text-sm shadow-sm cursor-pointer"
@@ -467,6 +568,32 @@ export function AdminOrdersTable({
               )}
             </div>
           </div>
+
+          {bulkRetryResults.length > 0 && (
+            <section aria-live="polite" className="border-b bg-muted/20 px-4 py-3 text-sm">
+              <p className="font-medium">
+                Retry finished: {retryCounts.processing} processing · {retryCounts.delivered} delivered · {retryCounts.failed} still failed
+                {retryCounts.onHold > 0 ? ` · ${retryCounts.onHold} on hold` : ""}
+                {retryCounts.skipped > 0 ? ` · ${retryCounts.skipped} skipped` : ""}
+                {retryCounts.errors > 0 ? ` · ${retryCounts.errors} errors` : ""}
+              </p>
+              {bulkRetryResults.some((result) =>
+                result.outcome === "error" || result.status === "FAILED" || result.status === "ON_HOLD" || result.outcome === "skipped"
+              ) && (
+                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {bulkRetryResults
+                    .filter((result) =>
+                      result.outcome === "error" || result.status === "FAILED" || result.status === "ON_HOLD" || result.outcome === "skipped"
+                    )
+                    .map((result) => (
+                      <li key={result.id}>
+                        <span className="font-mono">{result.reference}</span>: {result.message || result.status || "Could not retry"}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           {/* ── Quick-filter chips ─────────────────────────────────── */}
           <div className="flex flex-wrap gap-2 px-4 pb-3 pt-1 border-b">

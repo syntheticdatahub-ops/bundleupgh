@@ -55,7 +55,13 @@ function mapCapacity(dataSizeSnapshot: string): string {
 /**
  * Generic request helper for DataMart
  */
-async function dataMartRequest<T>(endpoint: string, method: "GET" | "POST", body?: any, additionalHeaders: Record<string, string> = {}): Promise<T> {
+async function dataMartRequest<T>(
+  endpoint: string,
+  method: "GET" | "POST",
+  body?: any,
+  additionalHeaders: Record<string, string> = {},
+  rejectHttpErrors = true,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: DATAMART_BASE_URL,
@@ -76,7 +82,7 @@ async function dataMartRequest<T>(endpoint: string, method: "GET" | "POST", body
       res.on("end", () => {
         try {
           const json = JSON.parse(data);
-          if ((res.statusCode ?? 500) < 200 || (res.statusCode ?? 500) >= 300) {
+          if (rejectHttpErrors && ((res.statusCode ?? 500) < 200 || (res.statusCode ?? 500) >= 300)) {
             reject(new Error(`DataMart request failed (${res.statusCode}): ${json.message || "Provider error"}`));
             return;
           }
@@ -122,7 +128,7 @@ export async function fulfillDataMartOrder(order: Order): Promise<void> {
 
     const response = await dataMartRequest<any>("/api/developer/purchase", "POST", payload, {
       "X-Idempotency-Key": `${order.id}-${order.autoRetryCount || 0}`,
-    });
+    }, false);
 
     if (response.status === "success" && response.data) {
       const transactionReference = response.data.transactionReference || response.data.purchaseId || response.data.orderReference;

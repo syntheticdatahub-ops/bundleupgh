@@ -164,6 +164,10 @@ The Orders admin page provides **Sync All Orders**. The server-side endpoint:
 
 The current fulfillment mapping follows the existing DataMart status handling: completed/delivered becomes `SUCCESS`, failed/rejected becomes `FAILED`, waiting/verification states become `ON_HOLD`, refunded becomes `REFUNDED`, and processing/created/pending becomes `PROCESSING`. DataMart cancellation is mapped to the existing local `FAILED` state.
 
+### Retrying failed deliveries
+
+On the Orders page, filter to **Delivery Failed**, select the failed orders to retry, then choose **Retry Failed**. The selection applies to the currently displayed page. The protected server endpoint accepts one order per request, and the UI submits selected orders sequentially with a delay between requests to avoid a burst of DataMart purchases. Only orders still marked `FAILED` with a successful or not-applicable payment status are eligible. Each retry uses the existing DataMart fulfillment client and increments its retry idempotency key. The result panel reports orders returned to `PROCESSING`, completed as `SUCCESS`, still failed, held, skipped, or errored. Payment status and payment metadata are not changed.
+
 ## Admin access and operations
 
 Admin pages require a Firebase-authenticated session. Server-side admin APIs additionally check the project's admin UID/email allowlist; a valid Firebase login alone is not sufficient for protected operations.
@@ -171,7 +175,7 @@ Admin pages require a Firebase-authenticated session. Server-side admin APIs add
 The admin area includes:
 
 - **Overview:** operational order metrics, recent/stuck orders, and the maintenance control.
-- **Orders:** searchable and filterable order table, order details, individual status sync/retry, and bulk reconciliation.
+- **Orders:** searchable and filterable order table, order details, individual status sync/retry, bulk failed-delivery retry, and DataMart reconciliation.
 - **Bundles:** bundle management and DataMart catalogue synchronization.
 - **Customers:** customer and order history views.
 - **Transactions:** payment records and statuses.
