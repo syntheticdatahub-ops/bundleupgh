@@ -1,4 +1,4 @@
-import { fsQuery, fsGet, fsAdd, fsUpdate } from "./firestore-rest";
+import { fsQuery, fsGet, fsAdd, fsUpdate, fsAggregateSum } from "./firestore-rest";
 import { generatePhoneVariants } from "./phone";
 import { decodeCursor as decodeCursorToken, decodeCursorState, encodeCursor as encodeCursorToken, encodeCursorState } from "./pagination";
 import type { Order, Payment } from "@/types/domain";
@@ -116,6 +116,17 @@ export async function getOperationalOrders(): Promise<Order[]> {
       return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function getPaidRevenueTotal(createdAtOrAfter?: string): Promise<number> {
+  const filters = [
+    { field: "paymentStatus", op: "IN", value: ["SUCCESS", "PAID"] },
+    ...(createdAtOrAfter
+      ? [{ field: "createdAt", op: "GREATER_THAN_OR_EQUAL", value: createdAtOrAfter }]
+      : []),
+  ];
+
+  return fsAggregateSum("orders", "sellingPriceSnapshot", filters);
 }
 
 /**

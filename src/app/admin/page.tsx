@@ -2,7 +2,7 @@ import { StatsCards } from "@/components/admin/overview/stats-cards"
 import { RevenueChart } from "@/components/admin/overview/revenue-chart"
 import { NetworkBreakdown } from "@/components/admin/overview/network-breakdown"
 import { RecentOrdersWidget } from "@/components/admin/overview/recent-orders-widget"
-import { getNetworkBreakdownStats, getOperationalOrderMetrics, getOperationalOrders, getRecentOrders, getStuckOrders } from "@/lib/orders"
+import { getNetworkBreakdownStats, getOperationalOrderMetrics, getOperationalOrders, getPaidRevenueTotal, getRecentOrders, getStuckOrders } from "@/lib/orders"
 import { getNetworks } from "@/lib/networks"
 import { AutoRefresh } from "@/components/admin/auto-refresh"
 import { MaintenanceCard } from "@/components/admin/maintenance-card"
@@ -13,6 +13,12 @@ const getCachedOperationalOrders = unstable_cache(
   async () => getOperationalOrders(),
   ['admin-overview-operational-orders'],
   { revalidate: 60 } // Cache for 60 seconds
+)
+
+const getCachedPaidRevenue = unstable_cache(
+  async (createdAtOrAfter: string | null) => getPaidRevenueTotal(createdAtOrAfter ?? undefined),
+  ["admin-overview-paid-revenue"],
+  { revalidate: 60 }
 )
 
 const getCachedRecentOrders = unstable_cache(
@@ -38,12 +44,23 @@ export const dynamic = "force-dynamic"
 export default async function AdminOverview({ searchParams }: { searchParams?: Promise<{ period?: string }> | { period?: string } }) {
   const resolvedParams = await Promise.resolve(searchParams ?? {})
   const period = typeof resolvedParams.period === "string" ? resolvedParams.period : "all"
+  const now = new Date()
+  let revenueStart: string | null = null
+  if (period === "today") {
+    now.setHours(0, 0, 0, 0)
+    revenueStart = now.toISOString()
+  } else if (period === "month") {
+    now.setDate(1)
+    now.setHours(0, 0, 0, 0)
+    revenueStart = now.toISOString()
+  }
 
-  const [operationalOrders, recentOrders, networks, stuckOrders] = await Promise.all([
+  const [operationalOrders, recentOrders, networks, stuckOrders, paidRevenue] = await Promise.all([
     getCachedOperationalOrders(),
     getCachedRecentOrders(),
     getCachedNetworks(),
     getCachedStuckOrders(),
+    getCachedPaidRevenue(revenueStart),
   ]);
 
   let filteredOrders = operationalOrders;
@@ -58,7 +75,10 @@ export default async function AdminOverview({ searchParams }: { searchParams?: P
     filteredOrders = operationalOrders.filter(o => new Date(o.createdAt) >= startOfMonth);
   }
 
-  const metrics = getOperationalOrderMetrics(filteredOrders);
+  const metrics = {
+    ...getOperationalOrderMetrics(filteredOrders),
+    totalRevenue: paidRevenue,
+  };
   const networkStats = getNetworkBreakdownStats(networks, filteredOrders);
   
 
@@ -107,4 +127,3 @@ export default async function AdminOverview({ searchParams }: { searchParams?: P
     </div>
   )
 }
-

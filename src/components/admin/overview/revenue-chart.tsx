@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Order } from "@/types/domain"
 
 export function RevenueChart({ orders }: { orders: Order[] }) {
-  // Operational orders only — paymentStatus SUCCESS or PAID (legacy) means money was actually collected.
+  // Only customer payments count as revenue; NOT_APPLICABLE is manual fulfillment.
   const successfulOrders = orders.filter((o) => {
     const status = o.paymentStatus?.toUpperCase() || "";
-    return status === "SUCCESS" || status === "PAID" || status === "NOT_APPLICABLE";
+    return status === "SUCCESS" || status === "PAID";
   });
 
   if (successfulOrders.length === 0) {
@@ -38,8 +38,8 @@ export function RevenueChart({ orders }: { orders: Order[] }) {
     if (!groupedData[date]) {
       groupedData[date] = { revenue: 0, profit: 0 };
     }
-    groupedData[date].revenue += o.sellingPriceSnapshot;
-    groupedData[date].profit += o.profitSnapshot;
+    groupedData[date].revenue += Number(o.sellingPriceSnapshot ?? 0);
+    groupedData[date].profit += Number(o.profitSnapshot ?? 0);
   });
 
   const chartData = Object.keys(groupedData).map((date) => ({

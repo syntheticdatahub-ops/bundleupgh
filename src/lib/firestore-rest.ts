@@ -270,11 +270,13 @@ export async function fsAggregateSum(
   const where = buildWhereClause(filters, groupOp);
 
   const body = {
-    structuredQuery: {
-      from: [{ collectionId: collection }],
-      ...(where ? { where } : {}),
+    structuredAggregationQuery: {
+      structuredQuery: {
+        from: [{ collectionId: collection }],
+        ...(where ? { where } : {}),
+      },
+      aggregations: [{ alias: "sum", sum: { field: { fieldPath } } }],
     },
-    aggregations: [{ sum: { field: { fieldPath } } }],
   };
 
   const bodyStr = JSON.stringify(body);
@@ -289,13 +291,56 @@ export async function fsAggregateSum(
     },
   }, bodyStr);
 
-  const data = JSON.parse(response);
-  if (data.error) {
-    throw new Error(`Firestore aggregation failed: ${data.error.message || JSON.stringify(data.error)}`);
+  let data: unknown;
+  try {
+    data = JSON.parse(response);
+  } catch {
+    throw new Error(`Invalid JSON from Firestore aggregation query: ${response}`);
   }
 
-  const aggregateValue = Array.isArray(data) ? data[0]?.aggregateFields?.sum?.doubleValue ?? data[0]?.aggregateFields?.sum?.integerValue ?? 0 : 0;
-  return Number(aggregateValue ?? 0);
+  const responseEntries = (Array.isArray(data) ? data : [data]).filter(
+    (entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null,
+  );
+  const responseEntry = responseEntries.find(
+    (entry): entry is Record<string, unknown> =>
+      "result" in entry || "error" in entry,
+  );
+  if (!responseEntry) {
+    if (responseEntries.some((entry) => typeof entry.readTime === "string")) return 0;
+    throw new Error("Firestore aggregation response did not contain a result.");
+  }
+
+  const error = responseEntry.error;
+  if (typeof error === "object" && error !== null) {
+    const errorMessage = "message" in error && typeof error.message === "string"
+      ? error.message
+      : JSON.stringify(error);
+    throw new Error(`Firestore aggregation failed: ${errorMessage}`);
+  }
+
+  const result = typeof responseEntry.result === "object" && responseEntry.result !== null
+    ? responseEntry.result
+    : responseEntry;
+  const aggregateFields = "aggregateFields" in result && typeof result.aggregateFields === "object" && result.aggregateFields !== null
+    ? result.aggregateFields
+    : null;
+  const sum = aggregateFields && "sum" in aggregateFields && typeof aggregateFields.sum === "object" && aggregateFields.sum !== null
+    ? aggregateFields.sum
+    : null;
+  const aggregateValue = sum && "doubleValue" in sum
+    ? sum.doubleValue
+    : sum && "integerValue" in sum
+      ? sum.integerValue
+      : undefined;
+  if (typeof aggregateValue !== "number" && typeof aggregateValue !== "string") {
+    throw new Error("Firestore aggregation response did not contain the requested sum.");
+  }
+
+  const total = Number(aggregateValue);
+  if (!Number.isFinite(total)) {
+    throw new Error("Firestore aggregation response contained an invalid sum.");
+  }
+  return total;
 }
 
 export async function fsCount(

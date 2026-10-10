@@ -182,6 +182,8 @@ The admin area includes:
 - **Manual fulfillment:** staff-initiated fulfillment.
 - **Notifications and support:** operational notifications and support order lookup.
 
+The overview's **Total Revenue** is summed server-side from paid order snapshots (`SUCCESS` and legacy `PAID` payment statuses), excluding manual no-payment orders. This total is not limited to the 500 order records loaded for the dashboard's charts and breakdowns. Today/month totals use the corresponding order creation-date boundary and refresh from cache at most once per minute.
+
 ### Maintenance mode
 
 Use the Maintenance Mode control on the admin overview, change the switch/message, and select **Save changes**. The saved Firestore setting takes precedence over environment fallback values. The public routes and maintenance page read this setting on the server.
