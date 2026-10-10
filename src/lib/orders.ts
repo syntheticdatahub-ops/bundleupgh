@@ -126,7 +126,52 @@ export async function getPaidRevenueTotal(createdAtOrAfter?: string): Promise<nu
       : []),
   ];
 
-  return fsAggregateSum("orders", "sellingPriceSnapshot", filters);
+  try {
+    return await fsAggregateSum("orders", "sellingPriceSnapshot", filters);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("requires an index")) {
+      throw error;
+    }
+
+    console.warn("[Admin Revenue] Required Firestore revenue index is not ready; summing paid orders in pages.");
+    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    if (!projectId) {
+      throw new Error("Cannot paginate paid orders without NEXT_PUBLIC_FIREBASE_PROJECT_ID.");
+    }
+
+    const pageSize = 500;
+    let total = 0;
+    for (const status of ["SUCCESS", "PAID"]) {
+      let cursor: { values: Array<{ referenceValue: string }>; mode: "startAfter" } | undefined;
+      while (true) {
+        const page = await fsQuery(
+          "orders",
+          [{ field: "paymentStatus", op: "EQUAL", value: status }],
+          { field: "__name__", direction: "ASCENDING" },
+          pageSize,
+          cursor,
+        ) as Order[];
+
+        for (const order of page) {
+          if (createdAtOrAfter && new Date(order.createdAt).getTime() < new Date(createdAtOrAfter).getTime()) {
+            continue;
+          }
+          total += Number(order.sellingPriceSnapshot ?? 0);
+        }
+
+        if (page.length < pageSize) break;
+        const lastOrder = page[page.length - 1];
+        cursor = {
+          values: [{
+            referenceValue: `projects/${projectId}/databases/(default)/documents/orders/${lastOrder.id}`,
+          }],
+          mode: "startAfter",
+        };
+      }
+    }
+
+    return total;
+  }
 }
 
 /**

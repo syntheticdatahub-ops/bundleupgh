@@ -182,7 +182,7 @@ The admin area includes:
 - **Manual fulfillment:** staff-initiated fulfillment.
 - **Notifications and support:** operational notifications and support order lookup.
 
-The overview's **Total Revenue** is summed server-side from paid order snapshots (`SUCCESS` and legacy `PAID` payment statuses), excluding manual no-payment orders. This total is not limited to the 500 order records loaded for the dashboard's charts and breakdowns. Today/month totals use the corresponding order creation-date boundary and refresh from cache at most once per minute.
+The overview's **Total Revenue** is summed server-side from paid order snapshots (`SUCCESS` and legacy `PAID` payment statuses), excluding manual no-payment orders. This total is not limited to the 500 order records loaded for the dashboard's charts and breakdowns. Today/month totals use the corresponding order creation-date boundary and refresh from cache at most once per minute. `firestore.indexes.json` declares the composite indexes used by Firestore's efficient aggregation path; if those indexes are still building or unavailable, the dashboard safely falls back to paginated paid-order reads. Deploy the indexes with `firebase deploy --only firestore:indexes --project <firebase-project-id>` to enable the aggregation path.
 
 ### Maintenance mode
 
